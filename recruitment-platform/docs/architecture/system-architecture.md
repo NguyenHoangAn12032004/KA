@@ -20,7 +20,7 @@
 - **Maintainability**: Modular và testable code
 - **Real-time**: WebSocket-based live updates
 
-### 1.3 High-Level Architecture
+### 1.3 High-Level Architecture (Đồ án tốt nghiệp - Tối ưu chi phí)
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   Web Browser   │    │  Mobile App     │    │  Admin Panel    │
@@ -30,32 +30,20 @@
          └───────────────────────┼───────────────────────┘
                                  │
          ┌─────────────────────────────────────────┐
-         │           Load Balancer/CDN             │
-         │          (AWS CloudFront)               │
+         │           Reverse Proxy                 │
+         │         (Nginx - Miễn phí)              │
          └─────────────────────────────────────────┘
                                  │
          ┌─────────────────────────────────────────┐
-         │           API Gateway                   │
-         │      (Kong/AWS API Gateway)             │
+         │         Node.js Backend API             │
+         │      (Express.js + Socket.IO)           │
+         │    [Tất cả services trong 1 app]        │
          └─────────────────────────────────────────┘
-                                 │
-    ┌────────────────────────────┼────────────────────────────┐
-    │                            │                            │
-┌───▼────┐  ┌─────────┐  ┌──────▼──┐  ┌──────────┐  ┌─────────┐
-│Auth    │  │User     │  │Job      │  │Notification│  │Analytics│
-│Service │  │Service  │  │Service  │  │Service     │  │Service  │
-└────────┘  └─────────┘  └─────────┘  └──────────┘  └─────────┘
-    │           │            │             │             │
-    └───────────┼────────────┼─────────────┼─────────────┘
-                │            │             │
-         ┌──────▼────────────▼─────────────▼──────┐
-         │           Message Queue                │
-         │         (Apache Kafka)                 │
-         └───────────────────────────────────────┘
                                  │
          ┌─────────────────────────────────────────┐
          │           Database Layer                │
-         │  PostgreSQL + Redis + Elasticsearch     │
+         │      PostgreSQL + Redis (Local)         │
+         │         Cloudinary (File storage)       │
          └─────────────────────────────────────────┘
 ```
 
@@ -80,154 +68,88 @@
 - **Testing**: Jest + Supertest
 - **Code Quality**: ESLint + Prettier + Husky
 
-### 2.3 Database & Storage
-- **Primary Database**: PostgreSQL 15
-- **Caching**: Redis 7
-- **Search Engine**: Elasticsearch 8
-- **File Storage**: AWS S3
-- **CDN**: AWS CloudFront
-- **Message Queue**: Apache Kafka
+### 2.3 Database & Storage (Đồ án tối ưu)
+- **Primary Database**: PostgreSQL (Miễn phí - Local/Heroku)
+- **Caching**: Redis (Miễn phí - Local/Redis Cloud free tier)
+- **File Storage**: Cloudinary (Free tier 25GB/month)
+- **Search**: PostgreSQL Full-text search (Thay Elasticsearch)
+- **Static Assets**: Vercel/Netlify CDN (Miễn phí)
 
-### 2.4 Infrastructure & DevOps
-- **Cloud Provider**: AWS
-- **Containerization**: Docker + Kubernetes
-- **CI/CD**: GitHub Actions
-- **Monitoring**: New Relic + CloudWatch
-- **Logging**: ELK Stack (Elasticsearch, Logstash, Kibana)
-- **Security**: AWS WAF + Security Groups
+### 2.4 Infrastructure & DevOps (Student Budget)
+- **Hosting**: Heroku free tier / Railway / Render
+- **Frontend Deployment**: Vercel / Netlify (Miễn phí)
+- **Containerization**: Docker (Local development)
+- **CI/CD**: GitHub Actions (Miễn phí)
+- **Monitoring**: Console logging + GitHub Issues
+- **Domain**: Freenom (.tk, .ml) hoặc subdomain miễn phí
 
-## 3. Microservices Architecture
+## 3. Simplified Architecture cho Đồ án
 
-### 3.1 Service Decomposition
+### 3.1 Monolithic Backend với Modular Design
+**Lý do**: Đơn giản hóa deployment và giảm complexity
 
-#### Authentication Service
-**Responsibilities**:
-- User registration và login
-- JWT token management
-- Social OAuth integration
-- Password reset functionality
-- Two-factor authentication
-
-**Technology Stack**:
-- Node.js + Express
-- Passport.js
-- Redis (session storage)
-- PostgreSQL (user credentials)
-
-#### User Management Service
-**Responsibilities**:
-- User profile management
-- Profile photo uploads
-- Skills và experience tracking
-- Privacy settings
-- Profile completion scoring
-
-**Technology Stack**:
-- Node.js + Express
-- AWS S3 (file storage)
-- PostgreSQL (profile data)
-- Elasticsearch (profile search)
-
-#### Job Management Service
-**Responsibilities**:
-- Job posting CRUD operations
-- Job search và filtering
-- Job recommendations
-- Application deadline management
-- Job analytics
-
-**Technology Stack**:
-- Node.js + Express
-- PostgreSQL (job data)
-- Elasticsearch (search functionality)
-- Redis (caching)
-
-#### Application Service
-**Responsibilities**:
-- Job application processing
-- Application status tracking
-- Resume/CV management
-- Interview scheduling
-- Application analytics
-
-**Technology Stack**:
-- Node.js + Express
-- PostgreSQL (application data)
-- AWS S3 (document storage)
-- Kafka (status change events)
-
-#### Notification Service
-**Responsibilities**:
-- Real-time notification delivery
-- Email notification sending
-- Push notification management
-- Notification preferences
-- Delivery tracking
-
-**Technology Stack**:
-- Node.js + Express
-- Socket.IO
-- Redis (real-time data)
-- SendGrid (email service)
-- Firebase (push notifications)
-
-#### Analytics Service
-**Responsibilities**:
-- User behavior tracking
-- Platform metrics collection
-- Recommendation engine
-- Report generation
-- A/B testing support
-
-**Technology Stack**:
-- Node.js + Express
-- PostgreSQL (analytics data)
-- Redis (real-time metrics)
-- Python (ML models)
-
-### 3.2 Inter-Service Communication
-
-#### Synchronous Communication
-- **HTTP/REST APIs**: For request-response operations
-- **GraphQL**: For complex data fetching requirements
-- **Service Mesh**: Istio for service-to-service communication
-
-#### Asynchronous Communication
-- **Apache Kafka**: Event streaming platform
-- **Redis Pub/Sub**: Real-time notifications
-- **WebSockets**: Client-server real-time communication
-
-#### Event-Driven Architecture
+#### Single Node.js Application với modules:
 ```
-User Registration → Auth Service → User Created Event → Kafka
-    ↓
-Notification Service ← Welcome Email Event ← Kafka
-    ↓
-Analytics Service ← User Signup Event ← Kafka
+src/
+├── modules/
+│   ├── auth/           # Authentication logic
+│   ├── users/          # User management
+│   ├── jobs/           # Job management
+│   ├── applications/   # Application logic
+│   ├── notifications/  # Real-time notifications
+│   └── analytics/      # Basic analytics
+├── middleware/         # Common middleware
+├── database/          # Database models & migrations
+├── utils/             # Utility functions
+└── routes/            # API routes
+```
+
+**Technology Stack cho từng module**:
+- **Framework**: Express.js với TypeScript
+- **Authentication**: Passport.js + JWT
+- **Real-time**: Socket.IO (thay Kafka)
+- **Database ORM**: Prisma (modern, type-safe)
+- **Validation**: Joi hoặc Zod
+- **File uploads**: Multer + Cloudinary
+
+### 3.2 Simplified Communication Pattern
+
+#### Real-time Events (thay Message Queue):
+```javascript
+// Event emitter pattern trong single application
+const EventEmitter = require('events');
+const appEvents = new EventEmitter();
+
+// Thay vì Kafka, dùng internal events
+appEvents.on('application.statusChanged', (data) => {
+  // Send notification via Socket.IO
+  notificationService.sendRealTimeUpdate(data);
+  // Send email
+  emailService.sendStatusUpdate(data);
+});
 ```
 
 ## 4. Database Design
 
-### 4.1 Database Architecture
-**Multi-database approach** với specialized databases:
+### 4.1 Database Architecture (Simplified)
+**Single PostgreSQL database** với smart schema design:
 
-#### PostgreSQL (Primary Database)
+#### PostgreSQL làm tất cả:
 - User profiles và authentication data
-- Job postings và applications
+- Job postings và applications  
 - Company information
 - Transactional data
+- **Full-text search** (thay Elasticsearch)
+- **JSONB fields** cho flexible data
 
-#### Redis (Caching & Sessions)
+#### Redis (Optional - có thể bỏ trong MVP):
 - User sessions
-- Frequently accessed data
-- Real-time notifications
-- Rate limiting counters
+- Rate limiting
+- Cache frequently accessed data
 
-#### Elasticsearch (Search & Analytics)
-- Job search indexing
-- User profile search
-- Application analytics
-- Log aggregation
+#### File Storage:
+- **Cloudinary Free Tier**: 25GB storage, image optimization
+- **Alternative**: Firebase Storage free tier
 
 ### 4.2 Database Schema Design
 
@@ -352,34 +274,32 @@ CREATE TABLE applications (
 - **XSS protection**: Content Security Policy headers
 - **CORS configuration**: Restricted origins
 
-## 6. Real-time Architecture
+## 6. Real-time Architecture (Simplified)
 
-### 6.1 WebSocket Implementation
+### 6.1 Socket.IO Implementation
 ```
 ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│   Client    │◄──▶│Socket.IO    │◄──▶│ Redis       │
-│             │    │ Server      │    │ Adapter     │
+│   Client    │◄──▶│Socket.IO    │◄──▶│ PostgreSQL  │
+│             │    │ Server      │    │ + EventBus  │
 └─────────────┘    └─────────────┘    └─────────────┘
                            │
                     ┌──────▼──────┐
-                    │  Kafka      │
-                    │ Consumer    │
+                    │  In-Memory  │
+                    │EventEmitter │
                     └─────────────┘
 ```
 
-#### Event Flow
-1. **Service Event**: Application status changed
-2. **Kafka Producer**: Publishes event to topic
-3. **Notification Service**: Consumes event
-4. **Redis Pub/Sub**: Broadcasts to Socket.IO instances
-5. **WebSocket**: Delivers to connected clients
+#### Simplified Event Flow:
+1. **Database Change**: Application status updated
+2. **Event Emitter**: Emit internal event
+3. **Socket.IO**: Broadcast to connected clients  
+4. **Email Service**: Send notification email
 
-### 6.2 Real-time Features
-- **Application status updates**: Instant status notifications
-- **Job recommendations**: Live job matching alerts
-- **Messaging**: Real-time chat functionality
-- **Presence indicators**: Online/offline status
-- **Typing indicators**: Chat typing notifications
+### 6.2 Real-time Features (Core MVP):
+- **Application status updates**: Instant notifications
+- **Basic messaging**: Simple chat between recruiter-candidate
+- **Job alerts**: New job notifications
+- **Online indicators**: Simple presence
 
 ## 7. Performance & Scalability
 
@@ -448,63 +368,80 @@ CREATE TABLE applications (
 - **Medium priority**: 1-hour response time
 - **Escalation**: Auto-escalate unresolved alerts
 
-## 9. Deployment Architecture
+## 9. Deployment Architecture (Student Budget)
 
-### 9.1 Kubernetes Deployment
+### 9.1 Free/Low-cost Deployment Options
+
+#### Option 1: Heroku (Easiest)
 ```yaml
-# Example service deployment
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: user-service
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: user-service
-  template:
-    metadata:
-      labels:
-        app: user-service
-    spec:
-      containers:
-      - name: user-service
-        image: recruitment-platform/user-service:v1.0.0
-        ports:
-        - containerPort: 3000
-        env:
-        - name: DATABASE_URL
-          valueFrom:
-            secretKeyRef:
-              name: db-secret
-              key: url
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "250m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
+# heroku.yml
+build:
+  docker:
+    web: Dockerfile
+run:
+  web: npm start
+addons:
+  - heroku-postgresql:hobby-dev  # Free PostgreSQL
+  - heroku-redis:hobby-dev       # Free Redis
 ```
 
-### 9.2 CI/CD Pipeline
-```
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│   GitHub    │───▶│GitHub       │───▶│ Docker      │
-│   Push      │    │Actions      │    │ Build       │
-└─────────────┘    └─────────────┘    └─────────────┘
-                           │
-┌─────────────┐    ┌───────▼──────┐    ┌─────────────┐
-│ Production  │◄───│ Staging      │◄───│  Testing    │
-│ Deployment  │    │ Deployment   │    │             │
-└─────────────┘    └──────────────┘    └─────────────┘
+#### Option 2: Railway (Modern alternative)
+```yaml
+# railway.toml
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "npm start"
+healthcheckPath = "/health"
 ```
 
-### 9.3 Environment Strategy
-- **Development**: Local development với Docker Compose
-- **Testing**: Automated testing environment
-- **Staging**: Production-like environment for QA
-- **Production**: High-availability production deployment
+#### Option 3: Render (Good free tier)
+```yaml
+# render.yaml
+services:
+  - type: web
+    name: recruitment-platform
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: recruitment-db
+          property: connectionString
+
+databases:
+  - name: recruitment-db
+    databaseName: recruitment_platform
+    user: admin
+```
+
+### 9.2 CI/CD Pipeline (Free)
+```yaml
+# .github/workflows/deploy.yml
+name: Deploy to Heroku
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: akhileshns/heroku-deploy@v3.12.12
+        with:
+          heroku_api_key: ${{secrets.HEROKU_API_KEY}}
+          heroku_app_name: "your-app-name"
+          heroku_email: "your-email@example.com"
+```
+
+### 9.3 Environment Setup
+- **Development**: Local với Docker Compose
+- **Production**: Heroku/Railway/Render free tier
+- **Database**: PostgreSQL free tier (1GB limit)
+- **File Storage**: Cloudinary free tier (25GB)
 
 ## 10. Disaster Recovery & Backup
 
