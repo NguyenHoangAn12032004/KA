@@ -1,0 +1,145 @@
+{
+  "firstName": "Nguyễn Hoàng",
+  "lastName": "Ân",
+  "email": "user@example.com",
+  "phone": "+84 987 654 321",
+  "address": "123 Đường Láng, Đống Đa, Hà Nội",
+  "university": "Đại học Bách khoa Hà Nội",
+  "major": "Công nghệ thông tin",
+  "graduationYear": 2024,
+  "gpa": 3.75,
+  "avatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face",
+  "portfolio": "https://hoangan-portfolio.dev",
+  "linkedin": "https://linkedin.com/in/hoangan-dev",
+  "github": "https://github.com/hoangan-dev",
+  "summary": "Sinh viên năm cuối chuyên ngành Công nghệ thông tin với đam mê phát triển phần mềm. Có kinh nghiệm thực tế trong phát triển web với React.js và Node.js. Tích cực tham gia các dự án nhóm và luôn học hỏi công nghệ mới.",
+  "skills": [
+    "JavaScript",
+    "TypeScript",
+    "React.js",
+    "Node.js",
+    "Python",
+    "Java",
+    "SQL",
+    "MongoDB",
+    "Git",
+    "Docker",
+    "AWS",
+    "HTML/CSS"
+  ],
+  "education": [
+    {
+      "degree": "Cử nhân Công nghệ thông tin",
+      "institution": "Đại học Bách khoa Hà Nội",
+      "major": "Công nghệ thông tin",
+      "startDate": "2020-09",
+      "endDate": "2024-06",
+      "current": false,
+      "gpa": "3.75"
+    },
+    {
+      "degree": "Chứng chỉ Full-stack Development",
+      "institution": "FUNiX",
+      "major": "Web Development",
+      "startDate": "2023-01",
+      "endDate": "2023-12",
+      "current": false,
+      "gpa": "A"
+    }
+  ],
+  "workExperience": [
+    {
+      "position": "Frontend Developer Intern",
+      "company": "VNG Corporation",
+      "location": "TP. Hồ Chí Minh",
+      "startDate": "2023-06",
+      "endDate": "2023-08",
+      "current": false,
+      "description": "Phát triển giao diện người dùng cho ứng dụng Zalo Mini App sử dụng React.js và TypeScript. Tối ưu hóa hiệu suất và trải nghiệm người dùng."
+    },
+    {
+      "position": "Part-time Web Developer",
+      "company": "Startup AI Solutions",
+      "location": "Hà Nội",
+      "startDate": "2023-09",
+      "endDate": "2024-05",
+      "current": false,
+      "description": "Xây dựng và maintain website công ty sử dụng Next.js và Node.js. Tích hợp APIs và làm việc với team design để implement UI/UX."
+    },
+    {
+      "position": "Freelance Developer",
+      "company": "Self-employed",
+      "location": "Remote",
+      "startDate": "2024-01",
+      "endDate": "2024-12",
+      "current": true,
+      "description": "Nhận các dự án freelance phát triển website cho SMEs. Chuyên về React.js, Node.js và WordPress customization."
+    }
+  ],
+  "projects": [
+    {
+      "name": "E-commerce Platform",
+      "description": "Xây dựng nền tảng thương mại điện tử hoàn chỉnh với chức năng mua bán, thanh toán online và quản lý kho hàng.",
+      "technologies": ["React.js", "Node.js", "MongoDB", "Stripe", "AWS"],
+      "link": "https://ecommerce-demo.hoangan.dev",
+      "github": "https://github.com/hoangan-dev/ecommerce-platform"
+    },
+    {
+      "name": "AI Chat Assistant",
+      "description": "Ứng dụng chat bot thông minh sử dụng OpenAI API để trả lời câu hỏi và hỗ trợ khách hàng tự động.",
+      "technologies": ["React.js", "Python", "FastAPI", "OpenAI", "Docker"],
+      "link": "https://chatbot-demo.hoangan.dev",
+      "github": "https://github.com/hoangan-dev/ai-chat-assistant"
+    },
+    {
+      "name": "Task Management App",
+      "description": "Ứng dụng quản lý công việc theo nhóm với tính năng real-time collaboration và notification system.",
+      "technologies": ["Vue.js", "Node.js", "Socket.io", "PostgreSQL", "Redis"],
+      "link": "https://taskmanager.hoangan.dev",
+      "github": "https://github.com/hoangan-dev/task-manager"
+    },
+    {
+      "name": "Weather Forecast App",
+      "description": "Ứng dụng dự báo thời tiết với giao diện đẹp mắt và tích hợp multiple weather APIs.",
+      "technologies": ["React Native", "TypeScript", "Weather API", "Redux"],
+      "link": "https://weather-app.hoangan.dev",
+      "github": "https://github.com/hoangan-dev/weather-forecast"
+    }
+  ],
+  "languages": [
+    {
+      "name": "Tiếng Việt",
+      "level": "Native"
+    },
+    {
+      "name": "English",
+      "level": "Fluent"
+    },
+    {
+      "name": "日本語 (Japanese)",
+      "level": "Intermediate"
+    }
+  ],
+  "certifications": [
+    {
+      "name": "AWS Certified Cloud Practitioner",
+      "issuer": "Amazon Web Services",
+      "date": "2024-03"
+    },
+    {
+      "name": "Google Analytics Certified",
+      "issuer": "Google",
+      "date": "2024-01"
+    },
+    {
+      "name": "Meta Frontend Developer Certificate",
+      "issuer": "Meta",
+      "date": "2023-11"
+    },
+    {
+      "name": "Microsoft Azure Fundamentals",
+      "issuer": "Microsoft",
+      "date": "2023-09"
+    }
+  ]
+}

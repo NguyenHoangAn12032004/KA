@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: recruitment_postgres
+    environment:
+      POSTGRES_DB: recruitment_platform
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/prisma/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - recruitment_network
+
+  # Backend API
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: recruitment_backend
+    environment:
+      DATABASE_URL: "postgresql://postgres:postgres123@postgres:5432/recruitment_platform"
+      JWT_SECRET: "development-jwt-secret-key"
+      JWT_EXPIRES_IN: "7d"
+      NODE_ENV: "development"
+      PORT: "5000"
+      CORS_ORIGIN: "http://localhost:3000"
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - ./backend/logs:/app/logs
+    depends_on:
+      - postgres
+    networks:
+      - recruitment_network
+    command: npm run dev
+
+  # Frontend React App
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: recruitment_frontend
+    environment:
+      REACT_APP_API_URL: "http://localhost:5000/api"
+      REACT_APP_SOCKET_URL: "http://localhost:5000"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - recruitment_network
+    command: npm start
+
+  # Redis (optional - for caching in production)
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: recruitment_redis
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   networks:
+  #     - recruitment_network
+
+volumes:
+  postgres_data:
+  # redis_data:
+
+networks:
+  recruitment_network:
+    driver: bridge

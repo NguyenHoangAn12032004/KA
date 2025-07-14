@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Test Page</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        button { padding: 10px 15px; margin: 5px; background: #007bff; color: white; border: none; cursor: pointer; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto; }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h1>🚀 Recruitment Platform API Test</h1>
+    
+    <div class="test-section">
+        <h3>Health Check</h3>
+        <button onclick="testHealth()">Test Health Endpoint</button>
+        <pre id="health-result"></pre>
+    </div>
+
+    <div class="test-section">
+        <h3>Root Endpoint</h3>
+        <button onclick="testRoot()">Test Root Endpoint</button>
+        <pre id="root-result"></pre>
+    </div>
+
+    <div class="test-section">
+        <h3>Admin Login</h3>
+        <button onclick="testLogin()">Test Admin Login</button>
+        <pre id="login-result"></pre>
+    </div>
+
+    <div class="test-section">
+        <h3>Jobs Listing</h3>
+        <button onclick="testJobs()">Test Jobs Endpoint</button>
+        <pre id="jobs-result"></pre>
+    </div>
+
+    <div class="test-section">
+        <h3>Companies</h3>
+        <button onclick="testCompanies()">Test Companies Endpoint</button>
+        <pre id="companies-result"></pre>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000';
+
+        async function makeRequest(url, options = {}) {
+            try {
+                const response = await fetch(url, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    },
+                    ...options
+                });
+                const data = await response.json();
+                return { success: true, status: response.status, data };
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        }
+
+        async function testHealth() {
+            const result = await makeRequest(`${API_BASE}/health`);
+            document.getElementById('health-result').innerHTML = JSON.stringify(result, null, 2);
+            document.getElementById('health-result').className = result.success ? 'success' : 'error';
+        }
+
+        async function testRoot() {
+            const result = await makeRequest(`${API_BASE}/`);
+            document.getElementById('root-result').innerHTML = JSON.stringify(result, null, 2);
+            document.getElementById('root-result').className = result.success ? 'success' : 'error';
+        }
+
+        async function testLogin() {
+            const result = await makeRequest(`${API_BASE}/api/auth/login`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    email: 'admin@recruitment.com',
+                    password: 'admin123'
+                })
+            });
+            document.getElementById('login-result').innerHTML = JSON.stringify(result, null, 2);
+            document.getElementById('login-result').className = result.success ? 'success' : 'error';
+        }
+
+        async function testJobs() {
+            const result = await makeRequest(`${API_BASE}/api/jobs`);
+            document.getElementById('jobs-result').innerHTML = JSON.stringify(result, null, 2);
+            document.getElementById('jobs-result').className = result.success ? 'success' : 'error';
+        }
+
+        async function testCompanies() {
+            const result = await makeRequest(`${API_BASE}/api/companies`);
+            document.getElementById('companies-result').innerHTML = JSON.stringify(result, null, 2);
+            document.getElementById('companies-result').className = result.success ? 'success' : 'error';
+        }
+
+        // Auto-run health check on page load
+        window.onload = () => {
+            testHealth();
+        };
+    </script>
+</body>
+</html>

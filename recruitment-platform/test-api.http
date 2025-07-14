@@ -1,0 +1,82 @@
+# Test API Endpoints for Recruitment Platform
+# Use this file with REST Client extension in VS Code
+
+### 1. Test server health
+GET http://localhost:5000/
+
+###
+
+### 2. Register a new student
+POST http://localhost:5000/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "student@test.com",
+  "password": "password123",
+  "role": "STUDENT",
+  "firstName": "Test",
+  "lastName": "Student"
+}
+
+###
+
+### 3. Register a new company
+POST http://localhost:5000/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "company@test.com",
+  "password": "password123",
+  "role": "COMPANY",
+  "companyName": "Test Company Ltd"
+}
+
+###
+
+### 4. Login with student account
+POST http://localhost:5000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "student@test.com",
+  "password": "password123"
+}
+
+###
+
+### 5. Login with company account
+POST http://localhost:5000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "company@test.com",
+  "password": "password123"
+}
+
+###
+
+### 6. Login with demo admin account (from seed data)
+POST http://localhost:5000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@recruitment.com",
+  "password": "admin123"
+}
+
+###
+
+### 7. Get all jobs
+GET http://localhost:5000/api/jobs
+
+###
+
+### 8. Get all users (admin only)
+GET http://localhost:5000/api/users
+
+###
+
+### 9. Get companies
+GET http://localhost:5000/api/companies
+
+###

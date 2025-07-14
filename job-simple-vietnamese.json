@@ -1,0 +1,17 @@
+{
+  "title": "Lập trình viên Frontend - ReactJS",
+  "description": "Chúng tôi đang tìm kiếm một lập trình viên Frontend tài năng có kinh nghiệm với ReactJS để gia nhập đội ngũ phát triển sản phẩm của chúng tôi.",
+  "requirements": [
+    "Có ít nhất 2 năm kinh nghiệm với ReactJS",
+    "Thành thạo HTML, CSS, JavaScript ES6+",
+    "Có kinh nghiệm với TypeScript",
+    "Hiểu biết về Redux hoặc Context API"
+  ],
+  "jobType": "FULL_TIME",
+  "workMode": "HYBRID",
+  "experienceLevel": "INTERMEDIATE",
+  "location": "Hà Nội, Việt Nam",
+  "salaryMin": 15000000,
+  "salaryMax": 25000000,
+  "currency": "VND"
+}

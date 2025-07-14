@@ -1,0 +1,387 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User roles enum
+enum UserRole {
+  ADMIN
+  STUDENT
+  COMPANY
+  HR_MANAGER
+}
+
+// Application status enum
+enum ApplicationStatus {
+  PENDING
+  REVIEWING
+  SHORTLISTED
+  INTERVIEW_SCHEDULED
+  INTERVIEWED
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+// Job type enum
+enum JobType {
+  INTERNSHIP
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  REMOTE
+}
+
+// Work mode enum
+enum WorkMode {
+  ONSITE
+  REMOTE
+  HYBRID
+}
+
+// Experience level enum
+enum ExperienceLevel {
+  ENTRY
+  JUNIOR
+  INTERMEDIATE
+  SENIOR
+  EXPERT
+}
+
+// Notification type enum
+enum NotificationType {
+  APPLICATION_SUBMITTED
+  APPLICATION_STATUS_CHANGED
+  NEW_JOB_POSTED
+  INTERVIEW_SCHEDULED
+  MESSAGE_RECEIVED
+  SYSTEM_ANNOUNCEMENT
+}
+
+// Users table - base user information
+model User {
+  id          String   @id @default(uuid())
+  email       String   @unique
+  password    String
+  role        UserRole
+  isActive    Boolean  @default(true)
+  isVerified  Boolean  @default(false)
+  lastLogin   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Profile relationships
+  studentProfile  StudentProfile?
+  companyProfile  CompanyProfile?
+
+  // Activity relationships
+  applications    Application[]
+  notifications   Notification[]
+  messages        Message[]
+  refreshTokens   RefreshToken[]
+
+  @@map("users")
+}
+
+// Student profile information
+model StudentProfile {
+  id              String    @id @default(uuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Basic info
+  firstName       String
+  lastName        String
+  phone           String?
+  dateOfBirth     DateTime?
+  avatar          String?
+  
+  // Education
+  university      String?
+  major           String?
+  graduationYear  Int?
+  gpa             Float?
+  
+  // Professional info
+  skills          String[]  @default([])
+  experience      String?
+  portfolio       String?
+  github          String?
+  linkedin        String?
+  resume          String?   // URL to uploaded resume
+  
+  // Preferences
+  preferredJobTypes     JobType[]     @default([])
+  preferredWorkModes    WorkMode[]    @default([])
+  preferredLocations    String[]      @default([])
+  expectedSalaryMin     Int?
+  expectedSalaryMax     Int?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("student_profiles")
+}
+
+// Company profile information
+model CompanyProfile {
+  id              String    @id @default(uuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Company info
+  companyName     String
+  companySize     String?   // e.g., "1-10", "11-50", "51-200"
+  industry        String?
+  website         String?
+  logo            String?
+  description     String?
+  
+  // Contact info
+  contactPerson   String?
+  phone           String?
+  address         String?
+  city            String?
+  country         String    @default("Vietnam")
+  
+  // Social links
+  linkedin        String?
+  facebook        String?
+  twitter         String?
+  
+  // Verification
+  isVerified      Boolean   @default(false)
+  verificationDoc String?   // URL to uploaded verification document
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relationships
+  jobs            Job[]
+  interviews      Interview[]
+
+  @@map("company_profiles")
+}
+
+// Job postings
+model Job {
+  id                String           @id @default(uuid())
+  companyId         String
+  company           CompanyProfile   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  // Basic job info
+  title             String
+  description       String
+  requirements      String[]         @default([])
+  benefits          String[]         @default([])
+  responsibilities  String[]         @default([])
+  
+  // Job details
+  jobType           JobType
+  workMode          WorkMode
+  experienceLevel   ExperienceLevel
+  location          String
+  
+  // Compensation
+  salaryMin         Int?
+  salaryMax         Int?
+  currency          String           @default("VND")
+  
+  // Application settings
+  applicationDeadline DateTime?
+  maxApplications   Int?
+  
+  // Skills and tags
+  requiredSkills    String[]         @default([])
+  preferredSkills   String[]         @default([])
+  tags              String[]         @default([])
+  
+  // Status
+  isActive          Boolean          @default(true)
+  isFeatured        Boolean          @default(false)
+  viewCount         Int              @default(0)
+  
+  // Timestamps
+  publishedAt       DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  // Relationships
+  applications      Application[]
+  interviews        Interview[]
+
+  @@map("jobs")
+}
+
+// Job applications
+model Application {
+  id              String              @id @default(uuid())
+  jobId           String
+  job             Job                 @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  studentId       String
+  student         User                @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  
+  // Application content
+  coverLetter     String?
+  customResume    String?             // URL to job-specific resume if uploaded
+  
+  // Status tracking
+  status          ApplicationStatus   @default(PENDING)
+  statusHistory   Json                @default("[]") // Array of status changes with timestamps
+  
+  // HR notes and feedback
+  hrNotes         String?
+  feedback        String?
+  rating          Int?                // 1-5 rating from HR
+  
+  // Timeline
+  appliedAt       DateTime            @default(now())
+  reviewedAt      DateTime?
+  respondedAt     DateTime?
+  
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  // Relationships
+  interviews      Interview[]
+
+  @@unique([jobId, studentId]) // Prevent duplicate applications
+  @@map("applications")
+}
+
+// Interview scheduling
+model Interview {
+  id              String           @id @default(uuid())
+  applicationId   String
+  application     Application      @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  companyId       String
+  company         CompanyProfile   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  jobId           String
+  job             Job              @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  
+  // Interview details
+  title           String
+  description     String?
+  type            String           // "PHONE", "VIDEO", "ONSITE", "TECHNICAL"
+  
+  // Scheduling
+  scheduledAt     DateTime
+  duration        Int              @default(60) // Duration in minutes
+  location        String?          // Physical address or video call link
+  meetingLink     String?
+  
+  // Participants
+  interviewer     String?          // Name of interviewer
+  interviewerEmail String?
+  
+  // Status
+  status          String           @default("SCHEDULED") // "SCHEDULED", "COMPLETED", "CANCELLED", "RESCHEDULED"
+  
+  // Results
+  notes           String?
+  rating          Int?             // 1-5 rating
+  feedback        String?
+  
+  // Timestamps
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@map("interviews")
+}
+
+// Notifications system
+model Notification {
+  id          String             @id @default(uuid())
+  userId      String
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  type        NotificationType
+  title       String
+  message     String
+  data        Json?              // Additional data for the notification
+  
+  isRead      Boolean            @default(false)
+  readAt      DateTime?
+  
+  createdAt   DateTime           @default(now())
+
+  @@map("notifications")
+}
+
+// Messages/Chat system
+model Message {
+  id          String    @id @default(uuid())
+  senderId    String
+  sender      User      @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  
+  receiverId  String?   // For direct messages
+  roomId      String?   // For group chats (e.g., interview room)
+  
+  content     String
+  messageType String    @default("text") // "text", "file", "image"
+  fileUrl     String?   // For file attachments
+  
+  isRead      Boolean   @default(false)
+  readAt      DateTime?
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("messages")
+}
+
+// Refresh tokens for JWT
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  token     String   @unique
+  expiresAt DateTime
+  
+  createdAt DateTime @default(now())
+
+  @@map("refresh_tokens")
+}
+
+// System settings and configurations
+model SystemSetting {
+  id    String @id @default(uuid())
+  key   String @unique
+  value String
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
+}
+
+// Analytics and statistics
+model Analytics {
+  id          String   @id @default(uuid())
+  
+  // Metrics
+  metric      String   // e.g., "job_views", "applications_submitted", "user_registrations"
+  value       Int
+  date        DateTime @db.Date
+  
+  // Dimensions
+  userId      String?
+  jobId       String?
+  companyId   String?
+  
+  // Metadata
+  metadata    Json?
+  
+  createdAt   DateTime @default(now())
+
+  @@unique([metric, date, userId, jobId, companyId])
+  @@map("analytics")
+}

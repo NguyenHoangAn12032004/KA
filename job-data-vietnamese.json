@@ -1,0 +1,51 @@
+{
+  "title": "Lập trình viên Frontend - ReactJS",
+  "description": "Chúng tôi đang tìm kiếm một lập trình viên Frontend tài năng có kinh nghiệm với ReactJS để gia nhập đội ngũ phát triển sản phẩm của chúng tôi. Bạn sẽ có cơ hội làm việc với các công nghệ hiện đại và tham gia xây dựng những ứng dụng web chất lượng cao.",
+  "requirements": [
+    "Có ít nhất 2 năm kinh nghiệm với ReactJS",
+    "Thành thạo HTML, CSS, JavaScript ES6+",
+    "Có kinh nghiệm với TypeScript",
+    "Hiểu biết về Redux hoặc Context API",
+    "Kinh nghiệm làm việc với RESTful APIs",
+    "Có khả năng responsive design",
+    "Biết sử dụng Git và làm việc nhóm"
+  ],
+  "responsibilities": [
+    "Phát triển và duy trì các ứng dụng web sử dụng ReactJS",
+    "Cộng tác với team UX/UI để implement designs",
+    "Tối ưu hóa ứng dụng về mặt hiệu suất",
+    "Code review và maintain code quality",
+    "Tham gia vào các cuộc họp technical planning",
+    "Hỗ trợ troubleshoot và fix bugs"
+  ],
+  "qualifications": [
+    "Bằng cử nhân Công nghệ thông tin hoặc chuyên ngành liên quan",
+    "Có portfolio hoặc dự án cá nhân để demo",
+    "Kỹ năng giao tiếp tốt",
+    "Khả năng học hỏi và adapt với công nghệ mới",
+    "Tiếng Anh đọc hiểu tài liệu kỹ thuật"
+  ],
+  "benefits": [
+    "Mức lương cạnh tranh: 15-25 triệu VND",
+    "Thưởng performance theo quý",
+    "Bảo hiểm sức khỏe đầy đủ",
+    "12 ngày phép năm + các ngày lễ",
+    "Môi trường làm việc trẻ trung, sáng tạo",
+    "Cơ hội học hỏi và phát triển kỹ năng",
+    "Team building và du lịch hàng năm",
+    "Hỗ trợ thiết bị làm việc (MacBook Pro)",
+    "Flexible working time và hybrid working"
+  ],
+  "jobType": "FULL_TIME",
+  "workMode": "HYBRID",
+  "experienceLevel": "INTERMEDIATE",
+  "location": "Hà Nội, Việt Nam",
+  "salaryMin": 15000000,
+  "salaryMax": 25000000,
+  "currency": "VND",
+  "department": "Engineering",
+  "requiredSkills": ["ReactJS", "TypeScript", "HTML/CSS", "JavaScript", "Redux", "Git"],
+  "preferredSkills": ["Next.js", "Material-UI", "Jest", "Cypress", "Docker"],
+  "tags": ["frontend", "reactjs", "typescript", "remote", "hybrid"],
+  "companyId": "78276bd3-69fe-4907-ab06-2ffe4cfaf774"
+}
