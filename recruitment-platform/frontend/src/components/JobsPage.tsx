@@ -1,965 +1,879 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useTranslation } from '../contexts/LanguageContext';
 import {
-  Box,
-  Container,
-  Typography,
-  Card,
-  CardContent,
-  Button,
-  TextField,
-  InputAdornment,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Chip,
-  Grid,
-  Paper,
-  IconButton,
-  Pagination,
-  Skeleton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Divider,
-  Stack,
-  Avatar
+  Box, Typography, Card, CardContent, Button, TextField, InputAdornment, Grid, Chip, Avatar, 
+  CircularProgress, Pagination, useTheme, Fade, Stack, Skeleton, IconButton, Container,
+  FormControl, InputLabel, Select, MenuItem, OutlinedInput, Drawer, Divider, Badge, Tooltip,
+  ToggleButtonGroup, ToggleButton, useMediaQuery, Paper, Collapse, Alert, Tabs, Tab,
+  Snackbar, Grow
 } from '@mui/material';
-import {
-  Search,
-  LocationOn,
-  Work,
-  Business,
-  Schedule,
-  AttachMoney,
-  BookmarkBorder,
-  Bookmark,
-  FilterList,
-  Close,
-  Send,
-  Star,
-  TrendingUp,
-  Edit,
-  Delete,
-  Save,
-  Cancel
+import { 
+  Search, Work, LocationOn, AttachMoney, Bookmark, BookmarkBorder, Send, Business,
+  FilterList, Sort, GridView, ViewList, Refresh, TuneOutlined, Close, KeyboardArrowDown,
+  TrendingUp, Notifications, AccessTime, School, Public, LocalOffer, Tune
 } from '@mui/icons-material';
-import { useAuth } from '../contexts/AuthContext';
-import { jobsAPI } from '../services/api';
+import { jobsAPI, savedJobsAPI } from '../services/api';
+import JobCard from './JobCard';
+import JobDetailsDialog from './JobDetailsDialog';
+import { toast } from 'react-toastify';
+import socketService from '../services/socketService';
+import { debounce } from 'lodash';
+import { API_URL } from '../config';
 
+// Import types
 interface Job {
   id: string;
   title: string;
-  company: {
-    id: string;
-    companyName: string;
-    logoUrl?: string;
-    industry?: string;
-  };
+  company?: string;
+  companyLogo?: string;
   location: string;
   salary?: string;
-  type: 'FULL_TIME' | 'PART_TIME' | 'INTERNSHIP' | 'CONTRACT';
-  level: 'ENTRY' | 'JUNIOR' | 'MIDDLE' | 'SENIOR' | 'LEAD';
-  description: string;
-  requirements: string[];
-  benefits: string[];
-  skills: string[];
-  createdAt: string;
-  deadline?: string;
-  isBookmarked?: boolean;
-  isHot?: boolean;
-  applicantsCount?: number;
+  salaryMin?: number;
+  salaryMax?: number;
+  currency?: string;
+  type: string; // Thay jobType thành type để phù hợp với interface
+  workMode?: string;
+  experienceLevel?: string;
+  description?: string;
+  applicationDeadline?: string;
+  publishedAt?: string;
+  applicationsCount?: number;
+  applicationCount?: number;
+  isSaved?: boolean;
+  hasApplied?: boolean;
+  viewCount?: number;
+  viewsCount?: number;
+  createdAt?: string;
+  skills?: string[];
 }
 
-const JobsPage: React.FC = () => {
-  const { user } = useAuth();
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [locationFilter, setLocationFilter] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
-  const [levelFilter, setLevelFilter] = useState('');
-  const [page, setPage] = useState(1);
-  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
-  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
-  const [savedJobs, setSavedJobs] = useState<string[]>([]);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [editingJob, setEditingJob] = useState<Job | null>(null);
-  const [jobToDelete, setJobToDelete] = useState<Job | null>(null);
+// Helper function to safely get a date
+const getDateValue = (dateStr: string | undefined): Date => {
+  if (!dateStr) return new Date();
+  try {
+    return new Date(dateStr);
+  } catch (e) {
+    return new Date();
+  }
+};
 
-  // Load jobs from API
-  useEffect(() => {
-    const loadJobs = async () => {
-      try {
-        setLoading(true);
-        const response = await jobsAPI.getAll();
-        
-        // Convert API response to expected format
-        const formattedJobs = response.data.jobs.map((job: any) => ({
-          id: job.id,
-          title: job.title,
-          company: {
-            id: job.company?.id || job.companyId,
-            companyName: job.company?.companyName || 'Unknown Company',
-            industry: job.company?.industry || 'Technology',
-            logoUrl: job.company?.logo || ''
-          },
-          location: job.location || 'Chưa xác định',
-          salary: job.salaryMin && job.salaryMax 
-            ? `${job.salaryMin/1000000}-${job.salaryMax/1000000} triệu`
-            : 'Thỏa thuận',
-          type: job.jobType || 'FULL_TIME',
-          level: job.experienceLevel || 'ENTRY',
-          description: job.description || '',
-          requirements: job.requirements || [],
-          benefits: job.benefits || [],
-          skills: job.requirements || [], // Use requirements as skills for display
-          postedDate: job.publishedAt ? new Date(job.publishedAt).toLocaleDateString('vi-VN') : new Date().toLocaleDateString('vi-VN'),
-          deadline: job.applicationDeadline ? new Date(job.applicationDeadline).toLocaleDateString('vi-VN') : null,
-          views: job.viewCount || 0,
-          applicants: job._aggr_count_applications || 0
-        }));
-        
-        setJobs(formattedJobs);
-        
-      } catch (error) {
-        console.error('Error loading jobs:', error);
-        // Fallback to mock data
-        setJobs([
-        {
-          id: '1',
-          title: 'Frontend Developer Intern',
-          company: {
-            id: 'techcorp',
-            companyName: 'TechCorp Vietnam',
-            industry: 'Technology',
-            logoUrl: ''
-          },
-          location: 'Ho Chi Minh City',
-          salary: '8-12 triệu',
-          type: 'INTERNSHIP',
-          level: 'ENTRY',
-          description: 'Chúng tôi đang tìm kiếm một Frontend Developer Intern có đam mê với công nghệ web hiện đại. Bạn sẽ được làm việc với team experienced developers và học hỏi các best practices trong việc phát triển ứng dụng web.',
-          requirements: [
-            'Kiến thức cơ bản về HTML, CSS, JavaScript',
-            'Có hiểu biết về React.js hoặc Vue.js',
-            'Khả năng làm việc nhóm tốt',
-            'Đam mê học hỏi công nghệ mới'
-          ],
-          benefits: [
-            'Lương thực tập cạnh tranh',
-            'Môi trường làm việc trẻ trung, năng động',
-            'Được mentor 1:1 từ senior developers',
-            'Cơ hội được full-time sau thực tập'
-          ],
-          skills: ['React.js', 'TypeScript', 'HTML/CSS', 'Git'],
-          createdAt: '2025-07-10',
-          deadline: '2025-08-10',
-          isBookmarked: false,
-          isHot: true,
-          applicantsCount: 15
-        },
-        {
-          id: '2',
-          title: 'UI/UX Designer',
-          company: {
-            id: 'designstudio',
-            companyName: 'Creative Design Studio',
-            industry: 'Design',
-            logoUrl: ''
-          },
-          location: 'Ha Noi',
-          salary: '15-20 triệu',
-          type: 'FULL_TIME',
-          level: 'JUNIOR',
-          description: 'Tham gia thiết kế giao diện người dùng cho các ứng dụng mobile và web. Làm việc trực tiếp với product team để tạo ra những trải nghiệm người dùng tuyệt vời.',
-          requirements: [
-            'Tốt nghiệp chuyên ngành Design, IT hoặc tương đương',
-            'Thành thạo Figma, Adobe XD, Sketch',
-            'Có portfolio design ấn tượng',
-            'Kỹ năng giao tiếp và thuyết trình tốt'
-          ],
-          benefits: [
-            'Lương cơ bản + bonus performance',
-            'Bảo hiểm sức khỏe toàn diện',
-            'Team building hàng quý',
-            'Cơ hội thăng tiến rõ ràng'
-          ],
-          skills: ['Figma', 'Adobe XD', 'Sketch', 'User Research', 'Prototyping'],
-          createdAt: '2025-07-09',
-          deadline: '2025-07-25',
-          isBookmarked: true,
-          isHot: false,
-          applicantsCount: 8
-        },
-        {
-          id: '3',
-          title: 'Data Analyst Intern',
-          company: {
-            id: 'analyticspro',
-            companyName: 'Analytics Pro',
-            industry: 'Data & Analytics',
-            logoUrl: ''
-          },
-          location: 'Da Nang',
-          salary: '6-10 triệu',
-          type: 'INTERNSHIP',
-          level: 'ENTRY',
-          description: 'Phân tích dữ liệu và tạo báo cáo cho các dự án kinh doanh. Học hỏi cách sử dụng các công cụ analytics hiện đại và machine learning cơ bản.',
-          requirements: [
-            'Kiến thức cơ bản về thống kê',
-            'Biết sử dụng Python hoặc R',
-            'Có kinh nghiệm với SQL',
-            'Tư duy logic và phân tích tốt'
-          ],
-          benefits: [
-            'Môi trường học hỏi chuyên sâu',
-            'Tiếp cận dữ liệu thực tế của doanh nghiệp',
-            'Mentoring từ senior data scientists',
-            'Certificate sau khi hoàn thành'
-          ],
-          skills: ['Python', 'SQL', 'Excel', 'Power BI', 'Statistics'],
-          createdAt: '2025-07-08',
-          deadline: '2025-08-01',
-          isBookmarked: false,
-          isHot: false,
-          applicantsCount: 12
-        },
-        {
-          id: '4',
-          title: 'Backend Developer',
-          company: {
-            id: 'startupx',
-            companyName: 'StartupX',
-            industry: 'Fintech',
-            logoUrl: ''
-          },
-          location: 'Ho Chi Minh City',
-          salary: '20-30 triệu',
-          type: 'FULL_TIME',
-          level: 'MIDDLE',
-          description: 'Phát triển và maintain các API services cho ứng dụng fintech. Làm việc với microservices architecture và cloud technologies.',
-          requirements: [
-            '2+ năm kinh nghiệm backend development',
-            'Thành thạo Node.js hoặc Python',
-            'Kinh nghiệm với database (PostgreSQL, MongoDB)',
-            'Hiểu biết về microservices và cloud (AWS/GCP)'
-          ],
-          benefits: [
-            'Lương cạnh tranh + equity',
-            'Flexible working hours',
-            'Latest MacBook Pro',
-            'Health insurance cho gia đình'
-          ],
-          skills: ['Node.js', 'PostgreSQL', 'Docker', 'AWS', 'Microservices'],
-          createdAt: '2025-07-07',
-          deadline: '2025-07-30',
-          isBookmarked: false,
-          isHot: true,
-          applicantsCount: 25
-        },
-        {
-          id: '5',
-          title: 'Digital Marketing Intern',
-          company: {
-            id: 'marketingagency',
-            companyName: 'Digital Marketing Agency',
-            industry: 'Marketing',
-            logoUrl: ''
-          },
-          location: 'Ho Chi Minh City',
-          salary: '5-8 triệu',
-          type: 'INTERNSHIP',
-          level: 'ENTRY',
-          description: 'Hỗ trợ team marketing trong việc lập kế hoạch và thực hiện các campaign digital marketing. Học hỏi về SEO, SEM, social media marketing.',
-          requirements: [
-            'Đam mê digital marketing',
-            'Kỹ năng viết content tốt',
-            'Biết sử dụng các social media platforms',
-            'Có khả năng phân tích số liệu cơ bản'
-          ],
-          benefits: [
-            'Được training chuyên sâu về digital marketing',
-            'Thực hành trên các project thực tế',
-            'Certificate Google Ads & Analytics',
-            'Networking với industry experts'
-          ],
-          skills: ['Content Writing', 'Social Media', 'Google Analytics', 'Facebook Ads'],
-          createdAt: '2025-07-06',
-          deadline: '2025-07-28',
-          isBookmarked: false,
-          isHot: false,
-          applicantsCount: 18
+const JobsPage: React.FC = () => {
+  // Theme and translations
+  const theme = useTheme();
+  const { t } = useTranslation();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
+  
+  // Constants
+  const jobsPerPage = 9;
+  const gridSize = isMobile ? 12 : isTablet ? 6 : 4;
+
+  // State declarations
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [openJobDetails, setOpenJobDetails] = useState(false);
+  const [savedJobs, setSavedJobs] = useState<string[]>([]);
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
+  const [newJobAlert, setNewJobAlert] = useState(false);
+  const [newJobCount, setNewJobCount] = useState(0);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [filters, setFilters] = useState({
+    jobType: '',
+    location: '',
+    salary: ''
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
+  const [jobTypeFilter, setJobTypeFilter] = useState<string[]>([]);
+  const [workModeFilter, setWorkModeFilter] = useState<string[]>([]);
+  const [experienceLevelFilter, setExperienceLevelFilter] = useState<string[]>([]);
+  const [locationFilter, setLocationFilter] = useState('');
+  const [sortOption, setSortOption] = useState('newest');
+
+  // Function declarations
+  // Load jobs
+  const loadJobs = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await jobsAPI.getAll();
+      console.log('Jobs response:', response.data);
+
+      // Chuẩn hóa dữ liệu jobs
+      let jobsData = [];
+      if (response.data) {
+        if (Array.isArray(response.data)) {
+          jobsData = response.data;
+        } else if (response.data.data && Array.isArray(response.data.data)) {
+          jobsData = response.data.data;
+        } else if (response.data.jobs && Array.isArray(response.data.jobs)) {
+          jobsData = response.data.jobs;
+        } else if (response.data.data && response.data.data.jobs && Array.isArray(response.data.data.jobs)) {
+          jobsData = response.data.data.jobs;
         }
-      ]);
-      } finally {
-        setLoading(false);
       }
-    };
+
+      // Đảm bảo số lượt xem và số ứng viên có giá trị
+      const processedJobs = jobsData.map((job: any) => ({
+        ...job,
+        viewCount: job.viewCount || job.viewsCount || 0, // Ưu tiên viewCount, rồi đến viewsCount
+        applicationsCount: job.applicationsCount || job.applicationCount || 0, // Ưu tiên applicationsCount, rồi đến applicationCount
+        viewsCount: job.viewCount || job.viewsCount || 0 // Cập nhật viewsCount để đảm bảo tương thích ngược
+      }));
+
+      setJobs(processedJobs);
+      setFilteredJobs(processedJobs); // Khởi tạo danh sách đã lọc với tất cả công việc
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching jobs:', error);
+      setError(t('error.loadJobs'));
+      setLoading(false);
+    }
+  }, [t]);
+
+  const handleRefresh = useCallback(async () => {
+    if (isRefreshing) return;
     
-    loadJobs();
+    setIsRefreshing(true);
+    await loadJobs();
+    setIsRefreshing(false);
+  }, [isRefreshing, loadJobs]);
+
+  const applyFilters = useCallback(() => {
+    let filtered = [...jobs];
+    
+    // Apply tab filter
+    switch (activeTab) {
+      case 1: // Full Time
+        filtered = filtered.filter(job => job.type === 'FULL_TIME');
+        break;
+      case 2: // Part Time
+        filtered = filtered.filter(job => job.type === 'PART_TIME');
+        break;
+      case 3: // Internship
+        filtered = filtered.filter(job => job.type === 'INTERNSHIP');
+        break;
+      case 4: // Remote
+        filtered = filtered.filter(job => job.workMode === 'REMOTE');
+        break;
+    }
+    
+    // Text search filter
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      filtered = filtered.filter(job =>
+        job.title?.toLowerCase().includes(searchLower) ||
+        job.company?.toLowerCase().includes(searchLower) ||
+        job.location?.toLowerCase().includes(searchLower) ||
+        job.description?.toLowerCase().includes(searchLower) ||
+        job.skills?.some((skill: string) => skill.toLowerCase().includes(searchLower))
+      );
+    }
+    
+    // Apply other filters
+    if (jobTypeFilter.length > 0) {
+      filtered = filtered.filter(job => jobTypeFilter.includes(job.type));
+    }
+    
+    if (workModeFilter.length > 0) {
+      filtered = filtered.filter(job => workModeFilter.includes(job.workMode || ''));
+    }
+    
+    if (experienceLevelFilter.length > 0) {
+      filtered = filtered.filter(job => experienceLevelFilter.includes(job.experienceLevel || ''));
+    }
+    
+    if (locationFilter) {
+      filtered = filtered.filter(job => 
+        job.location?.toLowerCase().includes(locationFilter.toLowerCase())
+      );
+    }
+    
+    // Apply sorting
+    filtered.sort((a, b) => {
+      switch (sortOption) {
+        case 'newest':
+          return getDateValue(b.publishedAt || b.createdAt).getTime() - 
+                 getDateValue(a.publishedAt || a.createdAt).getTime();
+        case 'oldest':
+          return getDateValue(a.publishedAt || a.createdAt).getTime() - 
+                 getDateValue(b.publishedAt || b.createdAt).getTime();
+        case 'salary-high':
+          return (b.salaryMax || 0) - (a.salaryMax || 0);
+        case 'salary-low':
+          return (a.salaryMin || 0) - (b.salaryMin || 0);
+        case 'popularity':
+          return (b.viewsCount || 0) - (a.viewsCount || 0);
+        default:
+          return 0;
+      }
+    });
+    
+    setFilteredJobs(filtered);
+    // Reset to first page when filters change
+    setCurrentPage(1);
+  }, [jobs, searchTerm, jobTypeFilter, workModeFilter, experienceLevelFilter, locationFilter, sortOption, activeTab]);
+
+  const matchesFilters = useCallback((job: Job) => {
+    if (jobTypeFilter.length > 0 && !jobTypeFilter.includes(job.type)) return false;
+    if (workModeFilter.length > 0 && !workModeFilter.includes(job.workMode || '')) return false;
+    if (experienceLevelFilter.length > 0 && !experienceLevelFilter.includes(job.experienceLevel || '')) return false;
+    if (locationFilter && !job.location?.toLowerCase().includes(locationFilter.toLowerCase())) return false;
+    return true;
+  }, [jobTypeFilter, workModeFilter, experienceLevelFilter, locationFilter]);
+
+  const handleSocketError = useCallback((error: Error) => {
+    console.error('Socket connection error:', error);
+    setError('Lost connection to real-time updates');
   }, []);
 
-  const getJobTypeLabel = (type: string) => {
-    switch (type) {
-      case 'FULL_TIME': return 'Toàn thời gian';
-      case 'PART_TIME': return 'Bán thời gian';
-      case 'INTERNSHIP': return 'Thực tập';
-      case 'CONTRACT': return 'Hợp đồng';
-      default: return type;
-    }
-  };
-
-  const getJobTypeColor = (type: string) => {
-    switch (type) {
-      case 'FULL_TIME': return 'success';
-      case 'PART_TIME': return 'warning';
-      case 'INTERNSHIP': return 'info';
-      case 'CONTRACT': return 'secondary';
-      default: return 'default';
-    }
-  };
-
-  const getLevelLabel = (level: string) => {
-    switch (level) {
-      case 'ENTRY': return 'Mới ra trường';
-      case 'JUNIOR': return 'Junior';
-      case 'MIDDLE': return 'Middle';
-      case 'SENIOR': return 'Senior';
-      case 'LEAD': return 'Lead';
-      default: return level;
-    }
-  };
-
-  const handleBookmarkToggle = (jobId: string) => {
-    setSavedJobs(prev => 
-      prev.includes(jobId) 
-        ? prev.filter(id => id !== jobId)
-        : [...prev, jobId]
+  const handleJobUpdate = useCallback((updatedJob: Job) => {
+    setJobs(prevJobs => 
+      prevJobs.map(job => 
+        job.id === updatedJob.id ? { ...job, ...updatedJob } : job
+      )
     );
-    
-    setJobs(prev => prev.map(job => 
-      job.id === jobId 
-        ? { ...job, isBookmarked: !job.isBookmarked }
-        : job
-    ));
+  }, []);
+
+  const handleNewJob = useCallback((newJob: Job) => {
+    setNewJobCount(prev => prev + 1);
+    setNewJobAlert(true);
+    // Add new job to the list if it matches current filters
+    if (matchesFilters(newJob)) {
+      setJobs(prevJobs => [newJob, ...prevJobs]);
+    }
+  }, [matchesFilters]);
+
+  // Handle save job
+  const handleSaveJob = async (jobId: string) => {
+    try {
+      if (savedJobs.includes(jobId)) {
+        // Unsave job
+        await jobsAPI.unsaveJob(jobId);
+        setSavedJobs(prev => prev.filter(id => id !== jobId));
+      } else {
+        // Save job
+        await jobsAPI.saveJob(jobId);
+        setSavedJobs(prev => [...prev, jobId]);
+      }
+    } catch (error) {
+      console.error('Error saving/unsaving job:', error);
+      setError(t('error.saveJob'));
+    }
   };
 
-  const handleJobClick = (job: Job) => {
+  // Effects
+  useEffect(() => {
+    loadJobs();
+  }, [loadJobs]);
+
+  useEffect(() => {
+    applyFilters();
+  }, [applyFilters]);
+
+  // Socket connection setup
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error('No authentication token found');
+      return;
+    }
+
+    try {
+      socketService.connect(token);
+      socketService.joinJobRoom('all-jobs');
+      socketService.on('new-job-posted', handleNewJob);
+      socketService.on('job-updated', handleJobUpdate);
+      socketService.on('connect_error', handleSocketError);
+
+      return () => {
+        socketService.off('new-job-posted');
+        socketService.off('job-updated');
+        socketService.off('connect_error');
+        socketService.disconnect();
+      };
+    } catch (error) {
+      console.error('Socket connection error:', error);
+      setError('Failed to establish real-time connection');
+    }
+  }, [handleNewJob, handleJobUpdate, handleSocketError]);
+
+  // Debounced search function
+  const debouncedSearch = useMemo(
+    () => debounce((term: string) => {
+      setSearchTerm(term);
+    }, 300),
+    []
+  );
+
+  // Handle job application
+  const handleApplyJob = (job: any) => {
+    // Open job details with application focus
     setSelectedJob(job);
-    setDetailDialogOpen(true);
+    setOpenJobDetails(true);
   };
 
-  // Job management handlers
-  const handleEditJob = (job: Job) => {
-    console.log('Edit job clicked:', job);
-    setEditingJob(job);
-    setEditDialogOpen(true);
-  };
-
-  const handleDeleteJob = (job: Job) => {
-    console.log('Delete job clicked:', job);
-    setJobToDelete(job);
-    setDeleteDialogOpen(true);
-  };
-
-  const handleSaveJobEdit = async () => {
-    if (!editingJob) return;
-
-    try {
-      await jobsAPI.update(editingJob.id, {
-        title: editingJob.title,
-        description: editingJob.description,
-        location: editingJob.location,
-        jobType: editingJob.type,
-        experienceLevel: editingJob.level,
-        salaryMin: editingJob.salary ? parseInt(editingJob.salary.split('-')[0]) * 1000000 : 0,
-        salaryMax: editingJob.salary ? parseInt(editingJob.salary.split('-')[1]) * 1000000 : 0,
-        requirements: editingJob.requirements
-      });
-
-      // Reload jobs
-      const response = await jobsAPI.getAll();
-      const formattedJobs = response.data.jobs.map((job: any) => ({
-        id: job.id,
-        title: job.title,
-        company: {
-          id: job.company?.id || job.companyId,
-          companyName: job.company?.companyName || 'Unknown Company',
-          industry: job.company?.industry || 'Technology',
-          logoUrl: job.company?.logo || ''
-        },
-        location: job.location || 'Vietnam',
-        type: job.jobType || 'FULL_TIME',
-        experience: job.experienceLevel || 'Mid',
-        salary: job.salaryMin && job.salaryMax 
-          ? `${job.salaryMin/1000000}-${job.salaryMax/1000000}`
-          : 'Thỏa thuận',
-        description: job.description || 'No description available',
-        requirements: job.requirements || [],
-        postedDate: job.publishedAt ? new Date(job.publishedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-        deadline: job.applicationDeadline ? new Date(job.applicationDeadline).toISOString().split('T')[0] : null,
-        isActive: job.isActive
-      }));
-      setJobs(formattedJobs);
-      
-      setEditDialogOpen(false);
-      setEditingJob(null);
-    } catch (error) {
-      console.error('Error updating job:', error);
-    }
-  };
-
-  const handleConfirmDeleteJob = async () => {
-    if (!jobToDelete) return;
-
-    try {
-      await jobsAPI.delete(jobToDelete.id);
-      
-      // Remove from local state
-      setJobs(jobs.filter(j => j.id !== jobToDelete.id));
-      
-      setDeleteDialogOpen(false);
-      setJobToDelete(null);
-    } catch (error) {
-      console.error('Error deleting job:', error);
-    }
-  };
-
-  const filteredJobs = jobs.filter(job => {
-    const matchesSearch = job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         job.company.companyName.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesLocation = locationFilter === '' || job.location.includes(locationFilter);
-    const matchesType = typeFilter === '' || job.type === typeFilter;
-    const matchesLevel = levelFilter === '' || job.level === levelFilter;
+  // Handle job click to view details
+  const handleJobClick = async (job: any) => {
+    setSelectedJob(job);
+    setOpenJobDetails(true);
     
-    return matchesSearch && matchesLocation && matchesType && matchesLevel;
-  });
+    try {
+      // Call the dedicated endpoint for tracking job views
+      const response = await jobsAPI.incrementView(job.id);
+      
+      if (response?.data?.success) {
+        // Update local job view count with the returned value from the server
+        setJobs(prev => 
+          prev.map(j => 
+            j.id === job.id 
+              ? { 
+                  ...j, 
+                  viewCount: response.data.data.viewCount,
+                  applicationsCount: response.data.data.applicationsCount || j.applicationsCount 
+                }
+              : j
+          )
+        );
+        
+        // Update filtered jobs as well
+        setFilteredJobs(prev => 
+          prev.map(j => 
+            j.id === job.id 
+              ? { 
+                  ...j, 
+                  viewCount: response.data.data.viewCount,
+                  applicationsCount: response.data.data.applicationsCount || j.applicationsCount 
+                }
+              : j
+          )
+        );
+      }
+    } catch (error) {
+      console.error('Error tracking job view:', error);
+      // Silently fail - don't show error to user
+    }
+  };
 
-  const jobsPerPage = 6;
+  // Handle menu click for job options
+  const handleMenuClick = (event: React.MouseEvent<HTMLElement>, job: any) => {
+    // Prevent propagation to avoid triggering job click
+    event.stopPropagation();
+    // Additional menu functionality can be added here
+    console.log('Job menu clicked:', job.title);
+  };
+  
+  // Reset all filters
+  const handleResetFilters = () => {
+    setSearchTerm('');
+    setFilters({
+      jobType: '',
+      location: '',
+      salary: ''
+    });
+    setFilteredJobs(jobs);
+  };
+
+  // Handle tab change
+  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+    setActiveTab(newValue);
+  };
+
+  // Pagination
+  const indexOfLastJob = currentPage * jobsPerPage;
+  const indexOfFirstJob = indexOfLastJob - jobsPerPage;
+  const currentJobs = filteredJobs.slice(indexOfFirstJob, indexOfLastJob);
   const totalPages = Math.ceil(filteredJobs.length / jobsPerPage);
-  const paginatedJobs = filteredJobs.slice((page - 1) * jobsPerPage, page * jobsPerPage);
 
-  if (loading) {
-    return (
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Box sx={{ mb: 4 }}>
-          <Skeleton variant="text" width={200} height={40} />
-          <Skeleton variant="rectangular" width="100%" height={60} sx={{ mt: 2 }} />
-        </Box>
-        <Box sx={{ 
-          display: 'grid', 
-          gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' }, 
-          gap: 3 
-        }}>
-          {[1, 2, 3, 4, 5, 6].map((item) => (
-            <Box key={item}>
-              <Skeleton variant="rectangular" height={200} />
-            </Box>
+  // Memoized location options from all jobs
+  const locationOptions = useMemo(() => {
+    const locations = jobs.map(job => job.location).filter(Boolean);
+    return Array.from(new Set(locations)).sort();
+  }, [jobs]);
+
+  // Filter drawer content
+  const filterDrawer = (
+    <Box sx={{ width: isMobile ? '100vw' : 320, p: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h6" fontWeight={700}>
+          {t('job.filters')}
+        </Typography>
+        <IconButton onClick={() => setFilterDrawerOpen(false)}>
+          <Close />
+        </IconButton>
+      </Box>
+      
+      <Divider sx={{ mb: 3 }} />
+      
+      {/* Job Type Filter */}
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+          {t('job.type')}
+        </Typography>
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+          {['FULL_TIME', 'PART_TIME', 'INTERNSHIP', 'CONTRACT'].map((type) => (
+            <Chip
+              key={type}
+              label={t(`job.types.${type.toLowerCase()}`)}
+              color={jobTypeFilter.includes(type) ? 'primary' : 'default'}
+              onClick={() => {
+                setJobTypeFilter(prev => 
+                  prev.includes(type) 
+                    ? prev.filter(t => t !== type) 
+                    : [...prev, type]
+                );
+              }}
+              sx={{ m: 0.5 }}
+            />
           ))}
-        </Box>
-      </Container>
-    );
-  }
+        </Stack>
+      </Box>
+      
+      {/* Work Mode Filter */}
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+          {t('job.workMode')}
+        </Typography>
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+          {['ONSITE', 'REMOTE', 'HYBRID'].map((mode) => (
+            <Chip
+              key={mode}
+              label={t(`job.workModes.${mode.toLowerCase()}`)}
+              color={workModeFilter.includes(mode) ? 'primary' : 'default'}
+              onClick={() => {
+                setWorkModeFilter(prev => 
+                  prev.includes(mode) 
+                    ? prev.filter(m => m !== mode) 
+                    : [...prev, mode]
+                );
+              }}
+              sx={{ m: 0.5 }}
+            />
+          ))}
+        </Stack>
+      </Box>
+      
+      {/* Experience Level Filter */}
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+          {t('job.experienceLevel')}
+        </Typography>
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+          {['ENTRY', 'JUNIOR', 'INTERMEDIATE', 'SENIOR'].map((level) => (
+            <Chip
+              key={level}
+              label={t(`job.experienceLevels.${level.toLowerCase()}`)}
+              color={experienceLevelFilter.includes(level) ? 'primary' : 'default'}
+              onClick={() => {
+                setExperienceLevelFilter(prev => 
+                  prev.includes(level) 
+                    ? prev.filter(l => l !== level) 
+                    : [...prev, level]
+                );
+              }}
+              sx={{ m: 0.5 }}
+            />
+          ))}
+        </Stack>
+      </Box>
+      
+      {/* Location Filter */}
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+          {t('job.location')}
+        </Typography>
+        <FormControl fullWidth size="small">
+          <InputLabel>{t('job.selectLocation')}</InputLabel>
+          <Select
+            value={locationFilter}
+            onChange={(e) => setLocationFilter(e.target.value)}
+            input={<OutlinedInput label={t('job.selectLocation')} />}
+          >
+            <MenuItem value="">
+              <em>{t('job.allLocations')}</em>
+            </MenuItem>
+            {locationOptions.map((location) => (
+              <MenuItem key={location} value={location}>
+                {location}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      </Box>
+      
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
+        <Button 
+          variant="outlined" 
+          onClick={handleResetFilters}
+          startIcon={<Refresh />}
+        >
+          {t('job.resetFilters')}
+        </Button>
+        <Button 
+          variant="contained" 
+          onClick={() => setFilterDrawerOpen(false)}
+        >
+          {t('job.applyFilters')}
+        </Button>
+      </Box>
+    </Box>
+  );
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      {/* Header */}
+    <Container maxWidth="xl" sx={{ py: { xs: 2, md: 4 } }}>
       <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 'bold' }}>
-          Tìm kiếm việc làm
+        <Typography variant="h4" fontWeight={700} gutterBottom>
+          {t('job.list')}
         </Typography>
-        <Typography variant="h6" color="text.secondary" gutterBottom>
-          Khám phá {jobs.length} cơ hội việc làm phù hợp với bạn
+        <Typography variant="body1" color="text.secondary">
+          {t('job.findYourDream')}
         </Typography>
       </Box>
-
-      {/* Filters */}
-      <Paper sx={{ p: 3, mb: 4 }}>
+      
+      {/* Search and Filter Bar */}
+      <Paper 
+        elevation={3} 
+        sx={{ 
+          p: 2, 
+          mb: 4, 
+          borderRadius: 3,
+          background: theme.palette.background.paper
+        }}
+      >
         <Box sx={{ 
-          display: 'grid', 
-          gridTemplateColumns: { 
-            xs: '1fr', 
-            sm: 'repeat(2, 1fr)', 
-            md: '2fr 1fr 1fr 1fr 1fr' 
-          }, 
+          display: 'flex', 
+          flexDirection: { xs: 'column', md: 'row' },
           gap: 2,
           alignItems: 'center'
         }}>
           <TextField
             fullWidth
-            placeholder="Tìm kiếm công việc, công ty..."
+            placeholder={t('job.searchPlaceholder')}
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => debouncedSearch(e.target.value)}
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
-                  <Search />
+                  <Search color="action" />
                 </InputAdornment>
               ),
+              sx: { borderRadius: 2 }
             }}
+            size="medium"
           />
-          <FormControl fullWidth>
-            <InputLabel>Địa điểm</InputLabel>
-            <Select
-              value={locationFilter}
-              label="Địa điểm"
-              onChange={(e) => setLocationFilter(e.target.value)}
+          
+          <Box sx={{ 
+            display: 'flex', 
+            gap: 1,
+            flexShrink: 0,
+            width: { xs: '100%', md: 'auto' },
+            justifyContent: { xs: 'space-between', md: 'flex-start' }
+          }}>
+            <Button
+              variant="outlined"
+              startIcon={<FilterList />}
+              onClick={() => setFilterDrawerOpen(true)}
+              sx={{ borderRadius: 2 }}
             >
-              <MenuItem value="">Tất cả</MenuItem>
-              <MenuItem value="Ho Chi Minh">TP.HCM</MenuItem>
-              <MenuItem value="Ha Noi">Hà Nội</MenuItem>
-              <MenuItem value="Da Nang">Đà Nẵng</MenuItem>
-            </Select>
-          </FormControl>
-          <FormControl fullWidth>
-            <InputLabel>Loại việc</InputLabel>
-            <Select
-              value={typeFilter}
-              label="Loại việc"
-              onChange={(e) => setTypeFilter(e.target.value)}
+              {t('job.filters')}
+            </Button>
+            
+            <FormControl size="small" sx={{ minWidth: 120 }}>
+              <Select
+                value={sortOption}
+                onChange={(e) => setSortOption(e.target.value)}
+                displayEmpty
+                startAdornment={<Sort sx={{ mr: 1, color: 'action.active' }} />}
+                sx={{ borderRadius: 2 }}
+              >
+                <MenuItem value="newest">{t('job.sort.newest')}</MenuItem>
+                <MenuItem value="oldest">{t('job.sort.oldest')}</MenuItem>
+                <MenuItem value="salary-high">{t('job.sort.salaryHigh')}</MenuItem>
+                <MenuItem value="salary-low">{t('job.sort.salaryLow')}</MenuItem>
+                <MenuItem value="popularity">{t('job.sort.popularity')}</MenuItem>
+              </Select>
+            </FormControl>
+            
+            <ToggleButtonGroup
+              value={viewMode}
+              exclusive
+              onChange={(e, newMode) => {
+                if (newMode) setViewMode(newMode);
+              }}
+              aria-label="view mode"
+              size="small"
+              sx={{ display: { xs: 'none', sm: 'flex' } }}
             >
-              <MenuItem value="">Tất cả</MenuItem>
-              <MenuItem value="FULL_TIME">Toàn thời gian</MenuItem>
-              <MenuItem value="PART_TIME">Bán thời gian</MenuItem>
-              <MenuItem value="INTERNSHIP">Thực tập</MenuItem>
-              <MenuItem value="CONTRACT">Hợp đồng</MenuItem>
-            </Select>
-          </FormControl>
-          <FormControl fullWidth>
-            <InputLabel>Cấp độ</InputLabel>
-            <Select
-              value={levelFilter}
-              label="Cấp độ"
-              onChange={(e) => setLevelFilter(e.target.value)}
-            >
-              <MenuItem value="">Tất cả</MenuItem>
-              <MenuItem value="ENTRY">Mới ra trường</MenuItem>
-              <MenuItem value="JUNIOR">Junior</MenuItem>
-              <MenuItem value="MIDDLE">Middle</MenuItem>
-              <MenuItem value="SENIOR">Senior</MenuItem>
-            </Select>
-          </FormControl>
-          <Button
-            variant="outlined"
-            startIcon={<FilterList />}
-            fullWidth
-            sx={{ height: 56 }}
-          >
-            Lọc nâng cao
-          </Button>
+              <ToggleButton value="grid" aria-label="grid view">
+                <GridView />
+              </ToggleButton>
+              <ToggleButton value="list" aria-label="list view">
+                <ViewList />
+              </ToggleButton>
+            </ToggleButtonGroup>
+          </Box>
         </Box>
       </Paper>
-
-      {/* Results Summary */}
-      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant="body1">
-          Hiển thị {paginatedJobs.length} trong tổng {filteredJobs.length} công việc
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Chip label="Mới nhất" variant="outlined" size="small" />
-          <Chip label="Hot jobs" variant="outlined" size="small" />
-          <Chip label="Phù hợp nhất" variant="outlined" size="small" />
-        </Box>
-      </Box>
-
-      {/* Job List */}
-      <Box sx={{ 
-        display: 'grid', 
-        gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' }, 
-        gap: 3 
-      }}>
-        {paginatedJobs.map((job) => (
-          <Card 
-            key={job.id}
-            sx={{ 
-              height: '100%', 
-              display: 'flex', 
-              flexDirection: 'column',
-              cursor: 'pointer',
-                transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
-                '&:hover': {
-                  transform: 'translateY(-4px)',
-                  boxShadow: 4
-                }
-              }}
-              onClick={() => handleJobClick(job)}
+      
+      {/* New Job Alert */}
+      <Collapse in={newJobAlert}>
+        <Alert 
+          severity="info"
+          action={
+            <Button 
+              color="inherit" 
+              size="small" 
+              onClick={handleRefresh}
+              startIcon={<Refresh />}
             >
-              <CardContent sx={{ flexGrow: 1, p: 3 }}>
-                {/* Job Header */}
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                  <Box sx={{ flexGrow: 1 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                      <Typography variant="h6" component="h3" sx={{ fontWeight: 'bold' }}>
-                        {job.title}
-                      </Typography>
-                      {job.isHot && (
-                        <Chip label="HOT" color="error" size="small" icon={<TrendingUp />} />
-                      )}
-                    </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                      <Business sx={{ fontSize: 16, mr: 1, color: 'text.secondary' }} />
-                      <Typography variant="body2" color="text.secondary">
-                        {job.company.companyName}
-                      </Typography>
-                    </Box>
-                  </Box>
-                  <IconButton
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleBookmarkToggle(job.id);
-                    }}
-                    sx={{ color: job.isBookmarked ? 'warning.main' : 'text.secondary' }}
-                  >
-                    {job.isBookmarked ? <Bookmark /> : <BookmarkBorder />}
-                  </IconButton>
-                </Box>
-
-                {/* Job Details */}
-                <Box sx={{ mb: 2 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                    <LocationOn sx={{ fontSize: 16, mr: 1, color: 'text.secondary' }} />
-                    <Typography variant="body2" color="text.secondary">
-                      {job.location}
-                    </Typography>
-                  </Box>
-                  
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                    <AttachMoney sx={{ fontSize: 16, mr: 1, color: 'text.secondary' }} />
-                    <Typography variant="body2" color="primary.main" sx={{ fontWeight: 'bold' }}>
-                      {job.salary || 'Thỏa thuận'}
-                    </Typography>
-                  </Box>
-
-                  <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
-                    <Chip
-                      label={getJobTypeLabel(job.type)}
-                      color={getJobTypeColor(job.type) as any}
-                      size="small"
-                    />
-                    <Chip
-                      label={getLevelLabel(job.level)}
-                      variant="outlined"
-                      size="small"
-                    />
-                  </Box>
-                </Box>
-
-                {/* Description */}
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  {job.description ? job.description.substring(0, 120) + '...' : 'Mô tả công việc sẽ được cập nhật...'}
-                </Typography>
-
-                {/* Skills */}
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 2 }}>
-                  {(job.skills || []).slice(0, 4).map((skill, index) => (
-                    <Chip
-                      key={index}
-                      label={skill}
-                      size="small"
-                      variant="outlined"
-                      sx={{ fontSize: '0.75rem' }}
-                    />
-                  ))}
-                  {(job.skills || []).length > 4 && (
-                    <Chip
-                      label={`+${(job.skills || []).length - 4}`}
-                      size="small"
-                      variant="outlined"
-                      sx={{ fontSize: '0.75rem' }}
-                    />
-                  )}
-                </Box>
-
-                {/* Footer */}
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 'auto' }}>
-                  <Typography variant="caption" color="text.secondary">
-                    {job.applicantsCount} người đã ứng tuyển
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {new Date(job.createdAt).toLocaleDateString('vi-VN')}
-                  </Typography>
-                </Box>
-
-                {/* Action Buttons */}
-                <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
-                  <Button
-                    size="small"
-                    startIcon={<Edit />}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleEditJob(job);
-                    }}
-                    variant="outlined"
-                  >
-                    Edit
-                  </Button>
-                  <Button
-                    size="small"
-                    startIcon={<Delete />}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteJob(job);
-                    }}
-                    variant="outlined"
-                    color="error"
-                  >
-                    Delete
-                  </Button>
-                </Box>
-              </CardContent>
-            </Card>
-        ))}
+              {t('job.refresh')}
+            </Button>
+          }
+          sx={{ mb: 3, borderRadius: 2 }}
+        >
+          {newJobCount === 1 
+            ? t('job.newJobAlert') 
+            : t('job.newJobsAlert').replace('{{count}}', newJobCount.toString())}
+        </Alert>
+      </Collapse>
+      
+      {/* Job Categories Tabs */}
+      <Box sx={{ mb: 3 }}>
+        <Tabs 
+          value={activeTab} 
+          onChange={handleTabChange}
+          variant="scrollable"
+          scrollButtons="auto"
+          sx={{
+            '& .MuiTab-root': {
+              minWidth: 'auto',
+              px: 3,
+              py: 1,
+              borderRadius: 2,
+              mx: 0.5,
+              fontWeight: 600,
+            },
+            '& .Mui-selected': {
+              bgcolor: 'primary.main',
+              color: 'white !important',
+            }
+          }}
+        >
+          <Tab label={t('job.allJobs')} icon={<Work />} iconPosition="start" />
+          <Tab label={t('job.fullTime')} icon={<Business />} iconPosition="start" />
+          <Tab label={t('job.partTime')} icon={<AccessTime />} iconPosition="start" />
+          <Tab label={t('job.internship')} icon={<School />} iconPosition="start" />
+          <Tab label={t('job.remote')} icon={<Public />} iconPosition="start" />
+        </Tabs>
       </Box>
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-          <Pagination
-            count={totalPages}
-            page={page}
-            onChange={(_, newPage) => setPage(newPage)}
-            color="primary"
-            size="large"
+      
+      {/* Filter Tags */}
+      {(jobTypeFilter.length > 0 || workModeFilter.length > 0 || experienceLevelFilter.length > 0 || locationFilter) && (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 3 }}>
+          {jobTypeFilter.map(type => (
+            <Chip
+              key={type}
+              label={t(`job.types.${type.toLowerCase()}`)}
+              onDelete={() => {
+                setJobTypeFilter(prev => prev.filter(t => t !== type));
+              }}
+              color="primary"
+              variant="outlined"
+              size="small"
+            />
+          ))}
+          
+          {workModeFilter.map(mode => (
+            <Chip
+              key={mode}
+              label={t(`job.workModes.${mode.toLowerCase()}`)}
+              onDelete={() => {
+                setWorkModeFilter(prev => prev.filter(m => m !== mode));
+              }}
+              color="primary"
+              variant="outlined"
+              size="small"
+            />
+          ))}
+          
+          {experienceLevelFilter.map(level => (
+            <Chip
+              key={level}
+              label={t(`job.experienceLevels.${level.toLowerCase()}`)}
+              onDelete={() => {
+                setExperienceLevelFilter(prev => prev.filter(l => l !== level));
+              }}
+              color="primary"
+              variant="outlined"
+              size="small"
+            />
+          ))}
+          
+          {locationFilter && (
+            <Chip
+              label={locationFilter}
+              onDelete={() => setLocationFilter('')}
+              color="primary"
+              variant="outlined"
+              size="small"
+            />
+          )}
+          
+          <Chip
+            label={t('job.clearAll')}
+            onClick={handleResetFilters}
+            color="default"
+            size="small"
           />
         </Box>
       )}
-
-      {/* Job Detail Dialog */}
-      <Dialog 
-        open={detailDialogOpen} 
-        onClose={() => setDetailDialogOpen(false)}
-        maxWidth="md"
-        fullWidth
-      >
-        {selectedJob && (
-          <>
-            <DialogTitle>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <Box>
-                  <Typography variant="h5" component="h2" gutterBottom>
-                    {selectedJob.title}
-                  </Typography>
-                  <Typography variant="h6" color="primary.main">
-                    {selectedJob.company.companyName}
-                  </Typography>
-                </Box>
-                <IconButton onClick={() => setDetailDialogOpen(false)}>
-                  <Close />
-                </IconButton>
-              </Box>
-            </DialogTitle>
-            
-            <DialogContent>
-              {/* Job Info */}
-              <Box sx={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(2, 1fr)', 
-                gap: 2,
-                mb: 3 
-              }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <LocationOn sx={{ mr: 1, color: 'text.secondary' }} />
-                  <Typography>{selectedJob.location}</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <AttachMoney sx={{ mr: 1, color: 'text.secondary' }} />
-                  <Typography color="primary.main" fontWeight="bold">
-                    {selectedJob.salary || 'Thỏa thuận'}
-                  </Typography>
-                </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <Work sx={{ mr: 1, color: 'text.secondary' }} />
-                  <Typography>{getJobTypeLabel(selectedJob.type)}</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <Star sx={{ mr: 1, color: 'text.secondary' }} />
-                  <Typography>{getLevelLabel(selectedJob.level)}</Typography>
-                </Box>
-              </Box>
-
-              <Divider sx={{ my: 2 }} />
-
-              {/* Description */}
-              <Typography variant="h6" gutterBottom>Mô tả công việc</Typography>
-              <Typography variant="body1" paragraph>
-                {selectedJob.description}
-              </Typography>
-
-              {/* Requirements */}
-              <Typography variant="h6" gutterBottom>Yêu cầu</Typography>
-              <Box component="ul" sx={{ pl: 2, mb: 2 }}>
-                {selectedJob.requirements.map((req, index) => (
-                  <Typography component="li" key={index} paragraph>
-                    {req}
-                  </Typography>
-                ))}
-              </Box>
-
-              {/* Benefits */}
-              <Typography variant="h6" gutterBottom>Quyền lợi</Typography>
-              <Box component="ul" sx={{ pl: 2, mb: 2 }}>
-                {selectedJob.benefits.map((benefit, index) => (
-                  <Typography component="li" key={index} paragraph>
-                    {benefit}
-                  </Typography>
-                ))}
-              </Box>
-
-              {/* Skills */}
-              <Typography variant="h6" gutterBottom>Kỹ năng yêu cầu</Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
-                {(selectedJob.skills || []).map((skill, index) => (
-                  <Chip key={index} label={skill} variant="outlined" />
-                ))}
-              </Box>
-            </DialogContent>
-
-            <DialogActions sx={{ p: 3 }}>
-              <Button
-                onClick={() => handleBookmarkToggle(selectedJob.id)}
-                startIcon={selectedJob.isBookmarked ? <Bookmark /> : <BookmarkBorder />}
-                color={selectedJob.isBookmarked ? 'warning' : 'inherit'}
-              >
-                {selectedJob.isBookmarked ? 'Đã lưu' : 'Lưu tin'}
-              </Button>
-              <Button
-                variant="contained"
-                startIcon={<Send />}
-                size="large"
-                disabled={!user || user.role !== 'STUDENT'}
-              >
-                Ứng tuyển ngay
-              </Button>
-            </DialogActions>
-          </>
-        )}
-      </Dialog>
-
-      {/* Edit Job Dialog */}
-      <Dialog
-        open={editDialogOpen}
-        onClose={() => setEditDialogOpen(false)}
-        maxWidth="md"
-        fullWidth
-      >
-        <DialogTitle>
-          <Typography variant="h6" component="h2" gutterBottom>
-            Chỉnh sửa công việc
+      
+      {/* Results Count */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="body2" color="text.secondary">
+          {filteredJobs.length} {t('job.resultsFound')}
+        </Typography>
+        
+        <Button 
+          startIcon={<Refresh />}
+          size="small"
+          onClick={handleRefresh}
+        >
+          {t('job.refresh')}
+        </Button>
+      </Box>
+      
+      {/* Loading State */}
+      {loading ? (
+        <Grid container spacing={3}>
+          {Array.from({ length: jobsPerPage }).map((_, idx) => (
+            <Grid item xs={12} sm={viewMode === 'grid' ? 6 : 12} md={viewMode === 'grid' ? 4 : 12} key={idx}>
+              <Skeleton 
+                variant="rectangular" 
+                height={viewMode === 'grid' ? 280 : 180} 
+                sx={{ borderRadius: 3 }} 
+              />
+            </Grid>
+          ))}
+        </Grid>
+      ) : filteredJobs.length === 0 ? (
+        <Box sx={{ 
+          textAlign: 'center', 
+          py: 8,
+          bgcolor: 'background.paper',
+          borderRadius: 3,
+          border: '1px dashed',
+          borderColor: 'divider'
+        }}>
+          <Typography variant="h6" gutterBottom>
+            {t('job.noMatch')}
           </Typography>
-        </DialogTitle>
-        <DialogContent>
-          {editingJob && (
-            <Box component="form" noValidate autoComplete="off">
-              <TextField
-                label="Tiêu đề"
-                variant="outlined"
-                fullWidth
-                value={editingJob.title}
-                onChange={(e) => setEditingJob({ ...editingJob, title: e.target.value })}
-                sx={{ mb: 2 }}
-              />
-              <TextField
-                label="Địa điểm"
-                variant="outlined"
-                fullWidth
-                value={editingJob.location}
-                onChange={(e) => setEditingJob({ ...editingJob, location: e.target.value })}
-                sx={{ mb: 2 }}
-              />
-              <TextField
-                label="Mức lương (triệu VNĐ)"
-                variant="outlined"
-                fullWidth
-                value={editingJob.salary}
-                onChange={(e) => setEditingJob({ ...editingJob, salary: e.target.value })}
-                sx={{ mb: 2 }}
-                InputProps={{
-                  startAdornment: <InputAdornment position="start">₫</InputAdornment>,
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            {t('job.adjustFilters')}
+          </Typography>
+          <Button 
+            variant="outlined" 
+            onClick={handleResetFilters}
+            startIcon={<Refresh />}
+          >
+            {t('job.clearFilters')}
+          </Button>
+        </Box>
+      ) : (
+        <>
+          <Grid container spacing={3}>
+            {currentJobs.map((job, index) => (
+              <Grid item xs={12} md={gridSize} key={job.id || index}>
+                <Grow in timeout={300 + index * 100}>
+                  <Box>
+                    <JobCard
+                      job={{
+                        ...job,
+                        company: {
+                          id: "1",
+                          companyName: job.company || "Unknown Company",
+                          logoUrl: job.companyLogo
+                        },
+                        type: (job.type || "FULL_TIME") as "FULL_TIME" | "PART_TIME" | "INTERNSHIP" | "CONTRACT",
+                        workMode: job.workMode as "REMOTE" | "ONSITE" | "HYBRID" | undefined,
+                        experienceLevel: job.experienceLevel as "ENTRY" | "JUNIOR" | "INTERMEDIATE" | "SENIOR" | undefined,
+                        viewCount: job.viewCount || job.viewsCount || 0, // Đảm bảo luôn có số lượt xem
+                        applicationsCount: job.applicationsCount || job.applicationCount || 0 // Đảm bảo luôn có số ứng viên
+                      }}
+                      onJobClick={handleJobClick}
+                      onApplyClick={handleApplyJob}
+                      onSaveClick={handleSaveJob}
+                      onMenuClick={handleMenuClick}
+                      viewMode={viewMode}
+                    />
+                  </Box>
+                </Grow>
+              </Grid>
+            ))}
+          </Grid>
+          
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+              <Pagination
+                count={totalPages}
+                page={currentPage}
+                onChange={(_, page) => setCurrentPage(page)}
+                color="primary"
+                size="large"
+                showFirstButton
+                showLastButton
+                sx={{ 
+                  '& .MuiPaginationItem-root': { borderRadius: 2 },
+                  '& .Mui-selected': { fontWeight: 'bold' }
                 }}
-              />
-              <FormControl fullWidth sx={{ mb: 2 }}>
-                <InputLabel>Loại việc</InputLabel>
-                <Select
-                  value={editingJob.type}
-                  label="Loại việc"
-                  onChange={(e) => setEditingJob({ ...editingJob, type: e.target.value })}
-                >
-                  <MenuItem value="FULL_TIME">Toàn thời gian</MenuItem>
-                  <MenuItem value="PART_TIME">Bán thời gian</MenuItem>
-                  <MenuItem value="INTERNSHIP">Thực tập</MenuItem>
-                  <MenuItem value="CONTRACT">Hợp đồng</MenuItem>
-                </Select>
-              </FormControl>
-              <FormControl fullWidth sx={{ mb: 2 }}>
-                <InputLabel>Cấp độ</InputLabel>
-                <Select
-                  value={editingJob.level}
-                  label="Cấp độ"
-                  onChange={(e) => setEditingJob({ ...editingJob, level: e.target.value })}
-                >
-                  <MenuItem value="ENTRY">Mới ra trường</MenuItem>
-                  <MenuItem value="JUNIOR">Junior</MenuItem>
-                  <MenuItem value="MIDDLE">Middle</MenuItem>
-                  <MenuItem value="SENIOR">Senior</MenuItem>
-                  <MenuItem value="LEAD">Lead</MenuItem>
-                </Select>
-              </FormControl>
-              <TextField
-                label="Mô tả công việc"
-                variant="outlined"
-                fullWidth
-                multiline
-                rows={4}
-                value={editingJob.description}
-                onChange={(e) => setEditingJob({ ...editingJob, description: e.target.value })}
-                sx={{ mb: 2 }}
-              />
-              <TextField
-                label="Yêu cầu công việc"
-                variant="outlined"
-                fullWidth
-                multiline
-                rows={4}
-                value={editingJob.requirements.join('\n')}
-                onChange={(e) => setEditingJob({ ...editingJob, requirements: e.target.value.split('\n') })}
-                sx={{ mb: 2 }}
               />
             </Box>
           )}
-        </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setEditDialogOpen(false)} color="inherit">
-            Hủy
-          </Button>
-          <Button onClick={handleSaveJobEdit} variant="contained" color="primary">
-            Lưu thay đổi
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Delete Job Confirmation Dialog */}
-      <Dialog
-        open={deleteDialogOpen}
-        onClose={() => setDeleteDialogOpen(false)}
+        </>
+      )}
+      
+      {/* Job Details Dialog */}
+      {selectedJob && (
+        <JobDetailsDialog
+          open={openJobDetails}
+          job={selectedJob}
+          onClose={() => setOpenJobDetails(false)}
+          onApply={handleApplyJob}
+          onSave={handleSaveJob}
+        />
+      )}
+      
+      {/* Filter Drawer */}
+      <Drawer
+        anchor="right"
+        open={filterDrawerOpen}
+        onClose={() => setFilterDrawerOpen(false)}
       >
-        <DialogTitle>Xác nhận xóa công việc</DialogTitle>
-        <DialogContent>
-          <Typography variant="body1">
-            Bạn có chắc chắn muốn xóa công việc này?
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)} color="inherit">
-            Hủy
-          </Button>
-          <Button onClick={handleConfirmDeleteJob} variant="contained" color="error">
-            Xóa
-          </Button>
-        </DialogActions>
-      </Dialog>
+        {filterDrawer}
+      </Drawer>
+
+      {/* Error Alert */}
+      <Snackbar
+        open={!!error}
+        autoHideDuration={6000}
+        onClose={() => setError(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert 
+          onClose={() => setError(null)} 
+          severity="error" 
+          sx={{ width: '100%' }}
+        >
+          {error}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 };

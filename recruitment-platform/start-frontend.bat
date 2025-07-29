@@ -1,4 +1,5 @@
 @echo off
-cd /d "c:\KA\recruitment-platform\frontend"
+echo Starting frontend server...
+cd frontend
 npm start
 pause

@@ -1,0 +1,1425 @@
+import { Router } from 'express';
+import { prisma } from '../utils/database';
+import { authenticateToken } from '../middleware/auth';
+import { Request, Response } from 'express';
+
+// Create and export the router
+const router = Router();
+export default router;
+
+// Get all users (admin only)
+router.get('/', async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        isActive: true,
+        isVerified: true,
+        createdAt: true,
+        lastLogin: true,
+        studentProfile: {
+          select: {
+            firstName: true,
+            lastName: true,
+            university: true,
+            major: true
+          }
+        },
+        company_profiles: {
+          select: {
+            companyName: true,
+            industry: true,
+            companySize: true
+          }
+        }
+      }
+    });
+
+    res.json({
+      success: true,
+      data: users
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
+// Get all students with profiles (for debugging)
+router.get('/students', async (req, res) => {
+  try {
+    const students = await prisma.user.findMany({
+      where: { role: 'STUDENT' },
+      include: {
+        studentProfile: true
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json({
+      success: true,
+      data: students,
+      count: students.length
+    });
+  } catch (error) {
+    console.error('Error fetching students:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
+// Dashboard sinh viên
+router.get('/students/:id/dashboard', async (req, res) => {
+  const { id } = req.params;
+  try {
+    // Thay thế raw query bằng Prisma query
+    const prismaClient = req.app.get('prisma') || prisma;
+    
+    // Lấy thông tin việc làm đã xem
+    const viewedJobs = await prismaClient.activityLog.findMany({
+      where: {
+        userId: id,
+        activityType: 'job_view',
+        entityType: 'job'
+      },
+      select: {
+        entityId: true,
+        createdAt: true
+      },
+      orderBy: {
+        createdAt: 'desc'
+      },
+      take: 10
+    });
+    
+    // Lấy thông tin việc làm đã lưu
+    const savedJobs = await prismaClient.savedJob.findMany({
+      where: {
+        userId: id
+      },
+      select: {
+        jobId: true,
+        savedAt: true,
+        job: {
+          select: {
+            title: true,
+            company_profiles: {
+              select: {
+                companyName: true,
+                logo: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: {
+        savedAt: 'desc'
+      },
+      take: 10
+    });
+    
+    // Lấy thông tin việc làm đã ứng tuyển
+    const applications = await prismaClient.application.findMany({
+      where: {
+        userId: id
+      },
+      select: {
+        id: true,
+        jobId: true,
+        createdAt: true,
+        status: true,
+        job: {
+          select: {
+            title: true,
+            company_profiles: {
+              select: {
+                companyName: true,
+                logo: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      },
+      take: 10
+    });
+    
+    // Lấy thông tin phỏng vấn
+    const interviews = await prismaClient.interview.findMany({
+      where: {
+        application: {
+          userId: id
+        }
+      },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        scheduledAt: true,
+        application: {
+          select: {
+            job: {
+              select: {
+                title: true,
+                company_profiles: {
+                  select: {
+                    companyName: true,
+                    logo: true
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      orderBy: {
+        scheduledAt: 'desc'
+      },
+      take: 10
+    });
+    
+    // Chuyển đổi dữ liệu để phù hợp với cấu trúc mong muốn
+    const formattedData = [
+      ...viewedJobs.map(job => ({
+        viewed_job_id: job.entityId,
+        viewed_at: job.createdAt,
+        saved_job_id: null,
+        saved_at: null,
+        applied_job_id: null,
+        applied_at: null,
+        interview_id: null,
+        interview_title: null,
+        interview_status: null,
+        interview_scheduled_at: null
+      })),
+      ...savedJobs.map(job => ({
+        viewed_job_id: null,
+        viewed_at: null,
+        saved_job_id: job.jobId,
+        saved_at: job.savedAt,
+        job_title: job.job?.title,
+        company_name: job.job?.company_profiles?.companyName,
+        company_logo: job.job?.company_profiles?.logo,
+        applied_job_id: null,
+        applied_at: null,
+        interview_id: null,
+        interview_title: null,
+        interview_status: null,
+        interview_scheduled_at: null
+      })),
+      ...applications.map(app => ({
+        viewed_job_id: null,
+        viewed_at: null,
+        saved_job_id: null,
+        saved_at: null,
+        applied_job_id: app.jobId,
+        applied_at: app.createdAt,
+        application_status: app.status,
+        job_title: app.job?.title,
+        company_name: app.job?.company_profiles?.companyName,
+        company_logo: app.job?.company_profiles?.logo,
+        interview_id: null,
+        interview_title: null,
+        interview_status: null,
+        interview_scheduled_at: null
+      })),
+      ...interviews.map(interview => ({
+        viewed_job_id: null,
+        viewed_at: null,
+        saved_job_id: null,
+        saved_at: null,
+        applied_job_id: null,
+        applied_at: null,
+        interview_id: interview.id,
+        interview_title: interview.title,
+        interview_status: interview.status,
+        interview_scheduled_at: interview.scheduledAt,
+        job_title: interview.application?.job?.title,
+        company_name: interview.application?.job?.company_profiles?.companyName,
+        company_logo: interview.application?.job?.company_profiles?.logo
+      }))
+    ];
+    
+    res.json({ success: true, data: formattedData });
+  } catch (error) {
+    console.error('Error fetching student dashboard:', error);
+    res.status(500).json({ success: false, error: (error as Error).message });
+  }
+});
+
+// Get current user profile - MUST BE BEFORE /:id route
+router.get('/profile', authenticateToken, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not authenticated'
+      });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        studentProfile: {
+          include: {
+            educations: true,
+            workExperiences: true,
+            projects: true,
+            languages: true,
+            certifications: true
+          }
+        },
+        company_profiles: true
+      }
+    }) as any; // Temporary type assertion while Prisma types update
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Return the appropriate profile based on user role
+    let profileData = null;
+    if (user.role === 'STUDENT') {
+      if (user.studentProfile) {
+        // User has existing profile
+        profileData = {
+          id: user.studentProfile.id,
+          firstName: user.studentProfile.firstName,
+          lastName: user.studentProfile.lastName,
+          email: user.email,
+          phone: user.studentProfile.phone,
+          dateOfBirth: user.studentProfile.dateOfBirth,
+          university: user.studentProfile.university,
+          major: user.studentProfile.major,
+          graduationYear: user.studentProfile.graduationYear,
+          gpa: user.studentProfile.gpa,
+          skills: user.studentProfile.skills || [],
+          portfolio: user.studentProfile.portfolio,
+          linkedin: user.studentProfile.linkedin,
+          github: user.studentProfile.github,
+          resume: user.studentProfile.resume,
+          avatar: user.studentProfile.avatar,
+          summary: user.studentProfile.experience, // Using experience field as summary
+          address: null, // Can be added to schema later if needed
+          education: user.studentProfile.educations.map(edu => ({
+            id: edu.id,
+            institution: edu.institution,
+            degree: edu.degree,
+            fieldOfStudy: edu.fieldOfStudy,
+            startDate: edu.startDate.toISOString().split('T')[0], // Format as YYYY-MM-DD
+            endDate: edu.endDate ? edu.endDate.toISOString().split('T')[0] : '',
+            current: edu.current,
+            gpa: edu.gpa,
+            achievements: edu.achievements
+          })),
+          workExperience: user.studentProfile.workExperiences.map(exp => ({
+            id: exp.id,
+            company: exp.company,
+            position: exp.position,
+            startDate: exp.startDate.toISOString().split('T')[0],
+            endDate: exp.endDate ? exp.endDate.toISOString().split('T')[0] : '',
+            current: exp.current,
+            description: exp.description,
+            skills: exp.skills,
+            achievements: exp.achievements
+          })),
+          projects: user.studentProfile.projects.map(proj => ({
+            id: proj.id,
+            title: proj.title,
+            description: proj.description,
+            technologies: proj.technologies,
+            startDate: proj.startDate.toISOString().split('T')[0],
+            endDate: proj.endDate ? proj.endDate.toISOString().split('T')[0] : '',
+            current: proj.current,
+            githubUrl: proj.githubUrl,
+            liveUrl: proj.liveUrl,
+            imageUrl: proj.imageUrl
+          })),
+          languages: user.studentProfile.languages.map(lang => ({
+            id: lang.id,
+            name: lang.name,
+            proficiency: lang.proficiency,
+            certification: lang.certification
+          })),
+          certifications: user.studentProfile.certifications.map(cert => ({
+            id: cert.id,
+            name: cert.name,
+            issuer: cert.issuer,
+            issueDate: cert.issueDate.toISOString().split('T')[0],
+            expiryDate: cert.expiryDate ? cert.expiryDate.toISOString().split('T')[0] : '',
+            credentialId: cert.credentialId,
+            credentialUrl: cert.credentialUrl
+          })),
+          // New fields for progress tracker
+          profile_completion: user.studentProfile.profile_completion || 0,
+          total_certifications: user.studentProfile.certifications.length,
+          total_projects: user.studentProfile.projects.length,
+        };
+      } else {
+        // Create default profile for student if not exists
+        console.log('🆕 Creating new student profile for user:', userId);
+        const newProfile = await prisma.studentProfile.create({
+          data: {
+            userId,
+            firstName: 'Sinh viên',
+            lastName: 'Demo',
+            skills: ['React', 'TypeScript', 'Node.js'] // Default skills
+          }
+        });
+        
+        profileData = {
+          id: newProfile.id,
+          firstName: newProfile.firstName,
+          lastName: newProfile.lastName,
+          email: user.email,
+          phone: newProfile.phone,
+          dateOfBirth: newProfile.dateOfBirth,
+          university: newProfile.university,
+          major: newProfile.major,
+          graduationYear: newProfile.graduationYear,
+          gpa: newProfile.gpa,
+          skills: newProfile.skills || [],
+          portfolio: newProfile.portfolio,
+          linkedin: newProfile.linkedin,
+          github: newProfile.github,
+          resume: newProfile.resume,
+          avatar: newProfile.avatar,
+          summary: newProfile.experience,
+          address: null,
+          education: [],
+          workExperience: [],
+          projects: [],
+          languages: [],
+          certifications: [],
+          // New fields for progress tracker
+          profile_completion: 0,
+          total_certifications: 0,
+          total_projects: 0,
+        };
+      }
+    } else if (user.role === 'COMPANY' && user.company_profiles?.[0]) {
+      profileData = user.company_profiles[0];
+    }
+
+    res.json({
+      success: true,
+      data: profileData
+    });
+  } catch (error) {
+    console.error('Error fetching profile:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
+// Update current user profile - MUST BE BEFORE /:id route
+router.put('/profile', authenticateToken, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User not authenticated' });
+    }
+    
+    // Log thông tin chi tiết
+    console.log('🔄 Processing profile update for user:', userId);
+    console.log('📝 Request body:', JSON.stringify(req.body, null, 2));
+    
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { studentProfile: true, company_profiles: true }
+    });
+    
+    // Log thông tin user
+    console.log('👤 User found:', user ? 'Yes' : 'No');
+    console.log('👤 User role:', user?.role);
+    console.log('👤 Has student profile:', !!user?.studentProfile);
+    
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    
+    // Thêm log chi tiết về role
+    if (user.role !== 'STUDENT') {
+      console.log('❌ User is not a student. Role:', user.role);
+      return res.status(400).json({ success: false, message: 'Profile update not supported for this user type' });
+    }
+    
+    const profileData = req.body;
+    console.log('🔄 Backend: Updating student profile for user:', userId);
+    let updatedProfile;
+    try {
+      if (user.studentProfile) {
+          // Lọc chỉ các trường hợp lệ trước khi update
+          const allowedFields = [
+            'firstName', 'lastName', 'phone', 'dateOfBirth', 'university', 'major',
+            'graduationYear', 'gpa', 'skills', 'portfolio', 'linkedin', 'github'
+          ];
+          
+          // Xử lý đặc biệt cho trường summary -> experience
+          const updateData: any = {};
+          for (const key of allowedFields) {
+            if (profileData[key] !== undefined) updateData[key] = profileData[key];
+          }
+          
+          // Xử lý riêng trường summary -> experience
+          if (profileData.summary !== undefined) {
+            updateData.experience = profileData.summary;
+            console.log('📝 Mapping summary to experience field:', profileData.summary);
+          }
+          
+          // Xử lý riêng trường profile_completion
+          if (profileData.profile_completion !== undefined) {
+            updateData.profile_completion = profileData.profile_completion;
+            console.log('📊 Received profile_completion value:', profileData.profile_completion);
+          }
+          
+          console.log('🔍 Update data:', updateData);
+          
+          // Tạo một đối tượng mới hoàn toàn với chỉ các trường hợp lệ
+          const cleanData = {
+            firstName: updateData.firstName || null,
+            lastName: updateData.lastName || null,
+            phone: updateData.phone || null,
+            dateOfBirth: updateData.dateOfBirth || null,
+            university: updateData.university || null,
+            major: updateData.major || null,
+            graduationYear: updateData.graduationYear || null,
+            gpa: updateData.gpa || null,
+            skills: updateData.skills || [],
+            portfolio: updateData.portfolio || null,
+            linkedin: updateData.linkedin || null,
+            github: updateData.github || null,
+            experience: updateData.experience || null,
+            profile_completion: updateData.profile_completion || null
+          };
+          
+          console.log('🔍 Clean data:', cleanData);
+          console.log('📝 Summary/Experience value:', updateData.experience);
+          console.log('📊 Profile completion value:', cleanData.profile_completion);
+          
+          try {
+            // Thay thế template literal với executeRaw
+            console.log('🔧 Executing SQL update with data:', JSON.stringify(cleanData, null, 2));
+            
+            const result = await prisma.$executeRaw`
+              UPDATE "public"."student_profiles" 
+              SET 
+                "firstName" = ${cleanData.firstName}, 
+                "lastName" = ${cleanData.lastName}, 
+                "phone" = ${cleanData.phone},
+                "portfolio" = ${cleanData.portfolio},
+                "linkedin" = ${cleanData.linkedin},
+                "github" = ${cleanData.github},
+                "experience" = ${cleanData.experience},
+                "skills" = ${JSON.stringify(cleanData.skills || [])},
+                "profile_completion" = ${cleanData.profile_completion},
+                "updatedAt" = ${new Date()}
+              WHERE "userId" = ${userId}
+            `;
+            
+            console.log('✅ SQL update executed successfully. Result:', result);
+            
+            // Sau khi cập nhật, lấy dữ liệu mới
+            const updatedResult = await prisma.studentProfile.findUnique({
+              where: { userId }
+            });
+            
+            console.log('🔍 Updated profile retrieved:', updatedResult ? 'Yes' : 'No');
+            
+            console.log('🔄 Updated profile with skills:', cleanData.skills);
+            updatedProfile = updatedResult;
+          } catch (err) {
+            console.error('❌ Lỗi khi thực hiện raw query:', err);
+            console.error('❌ Error details:', (err as any).message || 'Unknown error');
+            console.error('❌ SQL error code:', (err as any).code || 'No code');
+            throw err;
+          }
+        } else {
+          // Lọc chỉ các trường hợp lệ trước khi tạo mới
+          const allowedFields = [
+            'firstName', 'lastName', 'phone', 'dateOfBirth', 'university', 'major',
+            'graduationYear', 'gpa', 'skills', 'portfolio', 'linkedin', 'github'
+          ];
+          
+          const createData: any = { userId };
+          for (const key of allowedFields) {
+            if (profileData[key] !== undefined) createData[key] = profileData[key];
+          }
+          
+          // Xử lý riêng trường summary -> experience
+          if (profileData.summary !== undefined) {
+            createData.experience = profileData.summary;
+          }
+          
+          console.log('🔍 Create data:', createData);
+          
+          // Tạo một đối tượng mới hoàn toàn với chỉ các trường hợp lệ
+          const cleanData = {
+            userId,
+            firstName: createData.firstName || null,
+            lastName: createData.lastName || null,
+            phone: createData.phone || null,
+            dateOfBirth: createData.dateOfBirth || null,
+            university: createData.university || null,
+            major: createData.major || null,
+            graduationYear: createData.graduationYear || null,
+            gpa: createData.gpa || null,
+            skills: createData.skills || [],
+            portfolio: createData.portfolio || null,
+            linkedin: createData.linkedin || null,
+            github: createData.github || null,
+            experience: createData.experience || null
+          };
+          
+          console.log('🔍 Clean create data:', cleanData);
+          
+          try {
+            // Thay thế template literal với executeRaw
+            const result = await prisma.$executeRaw`
+              INSERT INTO "public"."student_profiles" 
+              ("userId", "firstName", "lastName", "phone", "portfolio", "linkedin", "github", "experience", "skills", "createdAt", "updatedAt")
+              VALUES 
+              (${userId}, ${cleanData.firstName}, ${cleanData.lastName}, ${cleanData.phone}, 
+               ${cleanData.portfolio}, ${cleanData.linkedin}, ${cleanData.github}, ${cleanData.experience}, 
+               ${JSON.stringify(cleanData.skills || [])},
+               ${new Date()}, ${new Date()})
+            `;
+            
+            // Sau khi thêm mới, lấy dữ liệu mới
+            const newResult = await prisma.studentProfile.findUnique({
+              where: { userId }
+            });
+            
+            console.log('🔄 Created profile with skills:', cleanData.skills);
+            updatedProfile = newResult;
+          } catch (err) {
+            console.error('Lỗi khi thực hiện raw query để tạo mới:', err);
+            throw err;
+          }
+        }
+      } catch (err) {
+        console.error('Lỗi khi update studentProfile:', err, profileData);
+        return res.status(400).json({ success: false, message: 'Lỗi khi update studentProfile: ' + (err as Error).message });
+      }
+      // Education
+      try {
+        if (profileData.education) {
+          await prisma.studentEducation.deleteMany({ where: { studentId: updatedProfile.id } });
+          if (profileData.education.length > 0) {
+          await prisma.studentEducation.createMany({
+            data: profileData.education.map((edu: any) => ({
+              studentId: updatedProfile.id,
+              institution: edu.institution,
+              degree: edu.degree,
+              fieldOfStudy: edu.fieldOfStudy,
+              startDate: new Date(edu.startDate),
+              endDate: edu.endDate ? new Date(edu.endDate) : null,
+              current: edu.current,
+              gpa: edu.gpa,
+              achievements: edu.achievements || []
+            }))
+          });
+        }
+        }
+      } catch (err) {
+        console.error('Lỗi ở trường education:', err, profileData.education);
+        return res.status(400).json({ success: false, message: 'Lỗi ở trường education: ' + (err as Error).message });
+      }
+      // Projects
+      try {
+        if (profileData.projects) {
+          await prisma.studentProject.deleteMany({ where: { studentId: updatedProfile.id } });
+          if (profileData.projects.length > 0) {
+          await prisma.studentProject.createMany({
+            data: profileData.projects.map((proj: any) => ({
+              studentId: updatedProfile.id,
+              title: proj.title,
+              description: proj.description,
+              technologies: proj.technologies || [],
+              startDate: new Date(proj.startDate),
+              endDate: proj.endDate ? new Date(proj.endDate) : null,
+              current: proj.current,
+              githubUrl: proj.githubUrl || '',
+              liveUrl: proj.liveUrl || '',
+              imageUrl: proj.imageUrl || ''
+            }))
+          });
+        }
+        }
+      } catch (err) {
+        console.error('Lỗi ở trường projects:', err, profileData.projects);
+        return res.status(400).json({ success: false, message: 'Lỗi ở trường projects: ' + (err as Error).message });
+      }
+      // Languages
+      try {
+        if (profileData.languages) {
+          await prisma.studentLanguage.deleteMany({ where: { studentId: updatedProfile.id } });
+          if (profileData.languages.length > 0) {
+          await prisma.studentLanguage.createMany({
+            data: profileData.languages.map((lang: any) => ({
+              studentId: updatedProfile.id,
+              name: lang.name,
+              proficiency: lang.proficiency,
+              certification: lang.certification || ''
+            }))
+          });
+        }
+        }
+      } catch (err) {
+        console.error('Lỗi ở trường languages:', err, profileData.languages);
+        return res.status(400).json({ success: false, message: 'Lỗi ở trường languages: ' + (err as Error).message });
+      }
+      // Certifications
+      try {
+        if (profileData.certifications) {
+          await prisma.studentCertification.deleteMany({ where: { studentId: updatedProfile.id } });
+          if (profileData.certifications.length > 0) {
+          await prisma.studentCertification.createMany({
+            data: profileData.certifications.map((cert: any) => ({
+              studentId: updatedProfile.id,
+              name: cert.name,
+              issuer: cert.issuer,
+              issueDate: new Date(cert.issueDate),
+              expiryDate: cert.expiryDate ? new Date(cert.expiryDate) : null,
+              credentialId: cert.credentialId || '',
+              credentialUrl: cert.credentialUrl || ''
+            }))
+          });
+        }
+      }
+      } catch (err) {
+        console.error('Lỗi ở trường certifications:', err, profileData.certifications);
+        return res.status(400).json({ success: false, message: 'Lỗi ở trường certifications: ' + (err as Error).message });
+      }
+      // Fetch the complete profile with all related data after update
+      const completeProfile = await prisma.studentProfile.findUnique({
+        where: { userId },
+        include: {
+          educations: true,
+          workExperiences: true,
+          projects: true,
+          languages: true,
+          certifications: true
+        }
+      });
+
+      const responseData = {
+        id: completeProfile!.id,
+        firstName: completeProfile!.firstName,
+        lastName: completeProfile!.lastName,
+        email: user.email,
+        phone: completeProfile!.phone,
+        dateOfBirth: completeProfile!.dateOfBirth,
+        university: completeProfile!.university,
+        major: completeProfile!.major,
+        graduationYear: completeProfile!.graduationYear,
+        gpa: completeProfile!.gpa,
+        skills: completeProfile!.skills || [],
+        portfolio: completeProfile!.portfolio,
+        linkedin: completeProfile!.linkedin,
+        github: completeProfile!.github,
+        resume: completeProfile!.resume,
+        avatar: completeProfile!.avatar,
+        summary: completeProfile!.experience,
+        address: null,
+        education: completeProfile!.educations.map(edu => ({
+          id: edu.id,
+          institution: edu.institution,
+          degree: edu.degree,
+          fieldOfStudy: edu.fieldOfStudy,
+          startDate: edu.startDate.toISOString().split('T')[0],
+          endDate: edu.endDate ? edu.endDate.toISOString().split('T')[0] : '',
+          current: edu.current,
+          gpa: edu.gpa,
+          achievements: edu.achievements
+        })),
+        workExperience: completeProfile!.workExperiences.map(exp => ({
+          id: exp.id,
+          company: exp.company,
+          position: exp.position,
+          startDate: exp.startDate.toISOString().split('T')[0],
+          endDate: exp.endDate ? exp.endDate.toISOString().split('T')[0] : '',
+          current: exp.current,
+          description: exp.description,
+          skills: exp.skills,
+          achievements: exp.achievements
+        })),
+        projects: completeProfile!.projects.map(proj => ({
+          id: proj.id,
+          title: proj.title,
+          description: proj.description,
+          technologies: proj.technologies,
+          startDate: proj.startDate.toISOString().split('T')[0],
+          endDate: proj.endDate ? proj.endDate.toISOString().split('T')[0] : '',
+          current: proj.current,
+          githubUrl: proj.githubUrl,
+          liveUrl: proj.liveUrl,
+          imageUrl: proj.imageUrl
+        })),
+        languages: completeProfile!.languages.map(lang => ({
+          id: lang.id,
+          name: lang.name,
+          proficiency: lang.proficiency,
+          certification: lang.certification
+        })),
+        certifications: completeProfile!.certifications.map(cert => ({
+          id: cert.id,
+          name: cert.name,
+          issuer: cert.issuer,
+          issueDate: cert.issueDate.toISOString().split('T')[0],
+          expiryDate: cert.expiryDate ? cert.expiryDate.toISOString().split('T')[0] : '',
+          credentialId: cert.credentialId,
+          credentialUrl: cert.credentialUrl
+        })),
+        // Add profile completion fields
+        profile_completion: completeProfile!.profile_completion || 0,
+        total_certifications: completeProfile!.certifications.length,
+        total_projects: completeProfile!.projects.length
+      };
+
+      res.json({
+        success: true,
+        data: responseData
+      });
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      res.status(500).json({ success: false, message: 'Server error: ' + (error as Error).message });
+    }
+  }
+});
+
+// Get user by ID
+router.get('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: {
+        studentProfile: true,
+        company_profiles: true
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Remove password from response
+    const { password: _, ...userWithoutPassword } = user;
+
+    res.json({
+      success: true,
+      data: userWithoutPassword
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
+// Update user status (admin action)
+router.patch('/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isActive } = req.body;
+
+    const updatedUser = await prisma.user.update({
+      where: { id },
+      data: { isActive },
+      select: {
+        id: true,
+        email: true,
+        isActive: true
+      }
+    });
+
+    res.json({
+      success: true,
+      data: updatedUser,
+      message: 'User ' + (isActive ? 'activated' : 'suspended') + ' successfully'
+    });
+
+  } catch (error) {
+    console.error('Error updating user status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
+// ===== STUDENT EDUCATION ENDPOINTS =====
+
+// POST new education
+router.post('/:id/education', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = parseInt(req.params.id);
+    
+    if (req.user.id !== userId) {
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    // Get the student profile first
+    const user = await prisma.user.findUnique({
+      where: { id: userId.toString() },
+      include: { studentProfile: true }
+    });
+
+    if (!user?.studentProfile) {
+      return res.status(404).json({ message: 'Student profile not found' });
+    }
+
+    const { institution, degree, fieldOfStudy, startDate, endDate, gpa, current, achievements } = req.body;
+
+    const education = await prisma.studentEducation.create({
+      data: {
+        studentId: user.studentProfile.id,
+        institution,
+        degree,
+        fieldOfStudy,
+        startDate: startDate ? new Date(startDate) : new Date(),
+        endDate: endDate ? new Date(endDate) : null,
+        current: current || false,
+        gpa: gpa ? parseFloat(gpa) : null,
+        achievements: achievements || []
+      }
+    });
+
+    res.json(education);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// PUT update education
+router.put('/:id/education/:educationId', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const educationId = parseInt(req.params.educationId);
+    
+    if (req.user.id !== userId) {
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    const { institution, degree, fieldOfStudy, startDate, endDate, gpa, current, achievements } = req.body;
+
+    const education = await prisma.studentEducation.update({
+      where: { 
+        id: educationId.toString()
+      },
+      data: {
+        institution,
+        degree,
+        fieldOfStudy,
+        startDate: startDate ? new Date(startDate) : null,
+        endDate: endDate ? new Date(endDate) : null,
+        current: current || false,
+        gpa: gpa ? parseFloat(gpa) : null,
+        achievements: achievements || []
+      }
+    });
+
+    res.json(education);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// DELETE education
+router.delete('/:id/education/:educationId', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const educationId = parseInt(req.params.educationId);
+    
+    if (req.user.id !== userId) {
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    await prisma.studentEducation.delete({
+      where: { 
+        id: educationId.toString()
+      }
+    });
+
+    res.json({ message: 'Education deleted successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// ===== STUDENT EXPERIENCE ENDPOINTS =====
+
+// POST new experience
+router.post('/:id/experience', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = parseInt(req.params.id);
+    
+    if (req.user.id !== userId) {
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    // Get the student profile first
+    const user = await prisma.user.findUnique({
+      where: { id: userId.toString() },
+      include: { studentProfile: true }
+    });
+
+    if (!user?.studentProfile) {
+      return res.status(404).json({ message: 'Student profile not found' });
+    }
+
+    const { company, position, startDate, endDate, description, current, skills, achievements } = req.body;
+
+    const experience = await prisma.studentExperience.create({
+      data: {
+        studentId: user.studentProfile.id,
+        company,
+        position,
+        startDate: startDate ? new Date(startDate) : new Date(),
+        endDate: endDate ? new Date(endDate) : null,
+        current: current || false,
+        description,
+        skills: skills || [],
+        achievements: achievements || []
+      }
+    });
+
+    res.json(experience);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// PUT update experience
+router.put('/:id/experience/:experienceId', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const experienceId = parseInt(req.params.experienceId);
+    
+    if (req.user.id !== userId) {
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    const { company, position, startDate, endDate, description, current, skills, achievements } = req.body;
+
+    const experience = await prisma.studentExperience.update({
+      where: { 
+        id: experienceId.toString()
+      },
+      data: {
+        company,
+        position,
+        startDate: startDate ? new Date(startDate) : null,
+        endDate: endDate ? new Date(endDate) : null,
+        current: current || false,
+        description,
+        skills: skills || [],
+        achievements: achievements || []
+      }
+    });
+
+    res.json(experience);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// DELETE experience
+router.delete('/:id/experience/:experienceId', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const experienceId = parseInt(req.params.experienceId);
+    
+    if (req.user.id !== userId) {
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    await prisma.studentExperience.delete({
+      where: { 
+        id: experienceId.toString()
+      }
+    });
+
+    res.json({ message: 'Experience deleted successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// ===== STUDENT PROJECTS ENDPOINTS =====
+
+// POST new project
+router.post('/:id/projects', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = parseInt(req.params.id);
+    
+    if (req.user.id !== userId) {
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    // Get the student profile first
+    const user = await prisma.user.findUnique({
+      where: { id: userId.toString() },
+      include: { studentProfile: true }
+    });
+
+    if (!user?.studentProfile) {
+      return res.status(404).json({ message: 'Student profile not found' });
+    }
+
+    const { title, description, technologies, startDate, endDate, current, githubUrl, liveUrl, imageUrl } = req.body;
+
+    const project = await prisma.studentProject.create({
+      data: {
+        studentId: user.studentProfile.id,
+        title,
+        description,
+        technologies: technologies || [],
+        startDate: startDate ? new Date(startDate) : new Date(),
+        endDate: endDate ? new Date(endDate) : null,
+        current: current || false,
+        githubUrl,
+        liveUrl,
+        imageUrl
+      }
+    });
+
+    res.json(project);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// PUT update project
+router.put('/:id/projects/:projectId', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const projectId = parseInt(req.params.projectId);
+    
+    if (req.user.id !== userId) {
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    const { title, description, technologies, startDate, endDate, current, githubUrl, liveUrl, imageUrl } = req.body;
+
+    const project = await prisma.studentProject.update({
+      where: { 
+        id: projectId.toString()
+      },
+      data: {
+        title,
+        description,
+        technologies: technologies || [],
+        startDate: startDate ? new Date(startDate) : null,
+        endDate: endDate ? new Date(endDate) : null,
+        current: current || false,
+        githubUrl,
+        liveUrl,
+        imageUrl
+      }
+    });
+
+    res.json(project);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// DELETE project
+router.delete('/:id/projects/:projectId', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const projectId = parseInt(req.params.projectId);
+    
+    if (req.user.id !== userId) {
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    await prisma.studentProject.delete({
+      where: { 
+        id: projectId.toString()
+      }
+    });
+
+    res.json({ message: 'Project deleted successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// ===== STUDENT LANGUAGES ENDPOINTS =====
+
+// POST new language
+router.post('/:id/languages', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = parseInt(req.params.id);
+    
+    if (req.user.id !== userId) {
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    // Get the student profile first
+    const user = await prisma.user.findUnique({
+      where: { id: userId.toString() },
+      include: { studentProfile: true }
+    });
+
+    if (!user?.studentProfile) {
+      return res.status(404).json({ message: 'Student profile not found' });
+    }
+
+    const { name, proficiency, certification } = req.body;
+
+    const language = await prisma.studentLanguage.create({
+      data: {
+        studentId: user.studentProfile.id,
+        name,
+        proficiency,
+        certification
+      }
+    });
+
+    res.json(language);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// PUT update language
+router.put('/:id/languages/:languageId', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const languageId = parseInt(req.params.languageId);
+    
+    if (req.user.id !== userId) {
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    const { name, proficiency, certification } = req.body;
+
+    const language = await prisma.studentLanguage.update({
+      where: { 
+        id: languageId.toString()
+      },
+      data: {
+        name,
+        proficiency,
+        certification
+      }
+    });
+
+    res.json(language);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// DELETE language
+router.delete('/:id/languages/:languageId', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const languageId = parseInt(req.params.languageId);
+    
+    if (req.user.id !== userId) {
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    await prisma.studentLanguage.delete({
+      where: { 
+        id: languageId.toString()
+      }
+    });
+
+    res.json({ message: 'Language deleted successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// ===== STUDENT CERTIFICATIONS ENDPOINTS =====
+
+// POST new certification
+router.post('/:id/certifications', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = parseInt(req.params.id);
+    
+    if (req.user.id !== userId) {
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    // Get the student profile first
+    const user = await prisma.user.findUnique({
+      where: { id: userId.toString() },
+      include: { studentProfile: true }
+    });
+
+    if (!user?.studentProfile) {
+      return res.status(404).json({ message: 'Student profile not found' });
+    }
+
+    const { name, issuer, issueDate, expiryDate, credentialId, credentialUrl } = req.body;
+
+    const certification = await prisma.studentCertification.create({
+      data: {
+        studentId: user.studentProfile.id,
+        name,
+        issuer,
+        issueDate: issueDate ? new Date(issueDate) : new Date(),
+        expiryDate: expiryDate ? new Date(expiryDate) : null,
+        credentialId,
+        credentialUrl
+      }
+    });
+
+    res.json(certification);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// PUT update certification
+router.put('/:id/certifications/:certificationId', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const certificationId = parseInt(req.params.certificationId);
+    
+    if (req.user.id !== userId) {
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    const { name, issuer, issueDate, expiryDate, credentialId, credentialUrl } = req.body;
+
+    const certification = await prisma.studentCertification.update({
+      where: { 
+        id: certificationId.toString()
+      },
+      data: {
+        name,
+        issuer,
+        issueDate: issueDate ? new Date(issueDate) : null,
+        expiryDate: expiryDate ? new Date(expiryDate) : null,
+        credentialId,
+        credentialUrl
+      }
+    });
+
+    res.json(certification);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// DELETE certification
+router.delete('/:id/certifications/:certificationId', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const certificationId = parseInt(req.params.certificationId);
+    
+    if (req.user.id !== userId) {
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    await prisma.studentCertification.delete({
+      where: { 
+        id: certificationId.toString()
+      }
+    });
+
+    res.json({ message: 'Certification deleted successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Delete user (admin action)
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    console.log('[DELETE] Attempting to delete user with ID: ' + id);
+
+    // Check if user exists
+    const user = await prisma.user.findUnique({
+      where: { id }
+    });
+
+    if (!user) {
+      console.log('[DELETE] User not found: ' + id);
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+        error: 'USER_NOT_FOUND'
+      });
+    }
+
+    console.log('[DELETE] User found: ' + user.email + ' (' + user.role + ')');
+
+    // Delete associated profiles first
+    if (user.role === 'STUDENT') {
+      const deletedProfiles = await prisma.studentProfile.deleteMany({
+        where: { userId: id }
+      });
+      console.log('[DELETE] Deleted ' + deletedProfiles.count + ' student profiles');
+    } else if (user.role === 'COMPANY') {
+      const deletedProfiles = await prisma.company_profiles.deleteMany({
+        where: { userId: id }
+      });
+      console.log('[DELETE] Deleted ' + deletedProfiles.count + ' company profiles');
+    }
+
+    // Delete the user
+    await prisma.user.delete({
+      where: { id }
+    });
+
+    console.log('[DELETE] Successfully deleted user: ' + id);
+
+    res.json({
+      success: true,
+      message: 'User deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('Error deleting users:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});

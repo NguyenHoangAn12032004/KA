@@ -1,0 +1,52 @@
+import { Router } from 'express';
+import { prisma } from '../utils/database';
+import { authenticateToken } from '../middleware/auth';
+import { Request, Response } from 'express';
+
+// Create the router
+const router = Router();
+
+// Get all users (admin only)
+router.get('/', async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        isActive: true,
+        isVerified: true,
+        createdAt: true,
+        lastLogin: true,
+        studentProfile: {
+          select: {
+            firstName: true,
+            lastName: true,
+            university: true,
+            major: true
+          }
+        },
+        company_profiles: {
+          select: {
+            companyName: true,
+            industry: true,
+            companySize: true
+          }
+        }
+      }
+    });
+
+    res.json({
+      success: true,
+      data: users
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
+// Export the router
+export default router;

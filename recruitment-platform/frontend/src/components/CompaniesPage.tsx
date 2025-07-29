@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Paper,
@@ -28,1118 +28,1436 @@ import {
   DialogActions,
   Rating,
   Badge,
-  CircularProgress
-} from '@mui/material';
+  Container,
+  Stack,
+  useTheme,
+  alpha,
+  keyframes,
+  Fade,
+  Slide,
+  Zoom,
+  Collapse,
+  ToggleButton,
+  ToggleButtonGroup,
+  Autocomplete,
+  Tooltip,
+  LinearProgress,
+  Skeleton,
+} from "@mui/material";
 import {
-  Search as SearchIcon,
-  LocationOn as LocationIcon,
-  Business as BusinessIcon,
-  People as PeopleIcon,
-  Work as WorkIcon,
-  Language as WebsiteIcon,
-  Favorite as FavoriteIcon,
-  FavoriteBorder as FavoriteBorderIcon,
-  FilterList as FilterIcon,
-  Clear as ClearIcon,
-  Visibility as ViewIcon
-} from '@mui/icons-material';
-import { companiesAPI } from '../services/api';
+  Search,
+  LocationOn,
+  Business,
+  People,
+  TrendingUp,
+  Star,
+  Visibility,
+  Bookmark,
+  BookmarkBorder,
+  FilterList,
+  Clear,
+  Sort,
+  ViewModule,
+  ViewList,
+  Language,
+  Email,
+  Phone,
+  Public,
+  Work,
+  Schedule,
+  Assessment,
+  EmojiEvents,
+  Verified,
+  LocalFireDepartment,
+  FlashOn,
+  Psychology,
+  Rocket,
+  AutoGraph,
+  Speed,
+  Security,
+  Groups,
+  MonetizationOn,
+  BusinessCenter,
+  School,
+  Code,
+  Tune,
+  Map,
+  Timeline,
+  CompareArrows,
+  TrendingDown,
+  Refresh,
+  LinkedIn,
+  Facebook,
+  Twitter,
+  Instagram,
+  YouTube,
+} from "@mui/icons-material";
+import { useAuth } from "../contexts/AuthContext";
+import { companiesAPI } from "../services/api";
+
+// Modern animations
+const gradientAnimation = keyframes`
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+`;
+
+const pulseGlow = keyframes`
+  0%, 100% { 
+    box-shadow: 0 0 20px rgba(102, 126, 234, 0.4),
+                0 0 40px rgba(102, 126, 234, 0.2),
+                0 0 60px rgba(102, 126, 234, 0.1);
+  }
+  50% { 
+    box-shadow: 0 0 30px rgba(102, 126, 234, 0.6),
+                0 0 60px rgba(102, 126, 234, 0.3),
+                0 0 90px rgba(102, 126, 234, 0.2);
+  }
+`;
+
+const floatingAnimation = keyframes`
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-10px) rotate(2deg); }
+`;
+
+const shimmerAnimation = keyframes`
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+`;
 
 interface Company {
   id: string;
-  name: string;
-  logo?: string;
+  companyName: string;
+  logoUrl?: string;
   industry: string;
-  size: string;
+  companySize: string;
   location: string;
-  description: string;
-  website: string;
-  rating: number;
-  totalReviews: number;
-  openJobs: number;
-  benefits: string[];
-  founded: string;
-  isFollowing: boolean;
+  description?: string;
+  website?: string;
+  foundedYear?: number;
+  rating?: number;
+  totalJobs?: number;
+  isVerified?: boolean;
+  isFeatured?: boolean;
+  socialLinks?: {
+    linkedin?: string;
+    facebook?: string;
+    website?: string;
+  };
 }
 
-interface CompanyReview {
-  id: string;
-  rating: number;
-  title: string;
-  review: string;
-  author: string;
-  position: string;
-  date: string;
-  pros: string;
-  cons: string;
-}
+// Company Card Component
+const CompanyCard: React.FC<{
+  company: Company;
+  viewMode: "grid" | "list";
+  onCompanyClick: (company: Company) => void;
+  onBookmarkClick: (companyId: string) => void;
+  isBookmarked?: boolean;
+}> = ({
+  company,
+  viewMode,
+  onCompanyClick,
+  onBookmarkClick,
+  isBookmarked = false,
+}) => {
+  const theme = useTheme();
+  const [isHovered, setIsHovered] = useState(false);
 
-const CompaniesPage: React.FC = () => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [industryFilter, setIndustryFilter] = useState('');
-  const [sizeFilter, setSizeFilter] = useState('');
-  const [locationFilter, setLocationFilter] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
-  const [companyDialogOpen, setCompanyDialogOpen] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [companies, setCompanies] = useState<Company[]>([]);
-
-  // Test API connection
-  const testAPIConnection = async () => {
-    try {
-      console.log('Testing API connection...');
-      const response = await fetch('http://localhost:5000/health');
-      const data = await response.json();
-      console.log('Health check response:', data);
-      return true;
-    } catch (error) {
-      console.error('API connection failed:', error);
-      return false;
+  const getSizeColor = (size: string) => {
+    switch (size.toLowerCase()) {
+      case "startup":
+        return theme.palette.info.main;
+      case "1-50":
+        return theme.palette.success.main;
+      case "51-200":
+        return theme.palette.warning.main;
+      case "201-1000":
+        return theme.palette.primary.main;
+      case "1000+":
+        return theme.palette.error.main;
+      default:
+        return theme.palette.grey[500];
     }
   };
 
-  // Test companies API
-  const testCompaniesAPI = async () => {
-    try {
-      console.log('Testing companies API...');
-      const isAPIUp = await testAPIConnection();
-      if (!isAPIUp) {
-        console.error('Backend server is not running');
-        return;
-      }
-      
-      const response = await companiesAPI.getAll();
-      console.log('Companies API response:', response);
-    } catch (error) {
-      console.error('Companies API error:', error);
-    }
-  };
-
-  // Load companies from API
-  useEffect(() => {
-    const loadCompanies = async () => {
-      try {
-        setLoading(true);
-        
-        // Test API first
-        await testCompaniesAPI();
-        
-        const response = await companiesAPI.getAll();
-        setCompanies(response.data.companies);
-      } catch (error) {
-        console.error('Error loading companies:', error);
-        // Fallback to empty array
-        setCompanies([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadCompanies();
-  }, []);
-
-  // Mock reviews data - will be replaced with API later
-  const [companyReviews] = useState<CompanyReview[]>([
-    {
-      id: '1',
-      rating: 5,
-      title: 'Great place to grow your career',
-      review: 'Amazing company culture with great learning opportunities. Management is supportive and the work is challenging.',
-      author: 'Software Engineer',
-      position: 'Software Engineer',
-      date: '2024-01-15',
-      pros: 'Great benefits, flexible working hours, supportive team',
-      cons: 'Sometimes tight deadlines'
-    },
-    {
-      id: '2',
-      rating: 4,
-      title: 'Good work-life balance',
-      review: 'Decent company with good benefits. The projects are interesting and the team is collaborative.',
-      author: 'Product Manager',
-      position: 'Product Manager',
-      date: '2024-01-10',
-      pros: 'Work-life balance, good compensation, modern office',
-      cons: 'Limited career advancement opportunities'
-    }
-  ]);
-
-  const industries = ['Technology', 'Finance', 'Healthcare', 'Education', 'Energy', 'Manufacturing', 'Retail'];
-  const companySizes = ['1-50', '51-200', '201-500', '501-1000', '1000+'];
-  const locations = ['Ho Chi Minh City', 'Ha Noi', 'Da Nang', 'Can Tho', 'Remote'];
-
-  const companiesPerPage = 6;
-
-  const filteredCompanies = companies.filter(company => {
-    const matchesSearch = company.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         company.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesIndustry = !industryFilter || company.industry === industryFilter;
-    const matchesSize = !sizeFilter || company.size === sizeFilter;
-    const matchesLocation = !locationFilter || company.location === locationFilter;
-
-    return matchesSearch && matchesIndustry && matchesSize && matchesLocation;
-  });
-
-  const totalPages = Math.ceil(filteredCompanies.length / companiesPerPage);
-  const startIndex = (currentPage - 1) * companiesPerPage;
-  const paginatedCompanies = filteredCompanies.slice(startIndex, startIndex + companiesPerPage);
-
-  const handleFollowCompany = (companyId: string) => {
-    // In a real app, this would update the backend
-    console.log('Follow company:', companyId);
-    
-    // Update local state
-    setCompanies(prevCompanies => 
-      prevCompanies.map(company => 
-        company.id === companyId 
-          ? { ...company, isFollowing: !company.isFollowing }
-          : company
-      )
-    );
-    
-    // Update selected company if it's the same one
-    if (selectedCompany && selectedCompany.id === companyId) {
-      setSelectedCompany({ ...selectedCompany, isFollowing: !selectedCompany.isFollowing });
-    }
-    
-    // Show feedback
-    const company = companies.find(c => c.id === companyId);
-    const action = company?.isFollowing ? 'Bỏ theo dõi' : 'Theo dõi';
-    alert(`${action} công ty ${company?.name} thành công!`);
-  };
-
-  const handleViewCompany = (company: Company) => {
-    setSelectedCompany(company);
-    setCompanyDialogOpen(true);
-  };
-
-  const clearFilters = () => {
-    setSearchTerm('');
-    setIndustryFilter('');
-    setSizeFilter('');
-    setLocationFilter('');
-    setCurrentPage(1);
-  };
-
-  const handleViewJobs = (companyId: string, companyName: string) => {
-    // Navigate to jobs page filtered by this company
-    console.log(`Viewing jobs for company: ${companyName} (ID: ${companyId})`);
-    // In a real app, this would navigate to a jobs page with company filter
-    // Example: navigate(`/jobs?company=${companyId}`);
-    alert(`Chuyển hướng đến trang việc làm của ${companyName}\n\nChức năng này sẽ được tích hợp với trang Jobs trong tương lai.`);
-  };
-
-  const getCompanyInitials = (name: string) => {
-    return name.split(' ').map(word => word[0]).join('').toUpperCase();
-  };
-
-  return (
-    <Box sx={{ 
-      minHeight: '100vh',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      position: 'relative',
-      '&::before': {
-        content: '""',
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: 'rgba(255, 255, 255, 0.95)',
-        zIndex: 0
-      }
-    }}>
-      <Box sx={{ position: 'relative', zIndex: 1, padding: 3 }}>
-        {/* Hero Section */}
-        <Box sx={{ 
-          textAlign: 'center', 
-          mb: 4, 
-          py: 4,
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  if (viewMode === "list") {
+    return (
+      <Card
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        sx={{
+          mb: 2,
+          cursor: "pointer",
+          position: "relative",
+          overflow: "hidden",
+          background: isHovered
+            ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.02)} 0%, ${alpha(theme.palette.secondary.main, 0.02)} 100%)`
+            : theme.palette.background.paper,
+          border: `2px solid ${isHovered ? theme.palette.primary.main : "transparent"}`,
           borderRadius: 3,
-          color: 'white',
-          position: 'relative',
-          overflow: 'hidden',
-          '&::before': {
-            content: '""',
-            position: 'absolute',
-            top: '-50%',
-            left: '-50%',
-            width: '200%',
-            height: '200%',
-            background: 'url("data:image/svg+xml,%3Csvg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg"%3E%3Cg fill="none" fill-rule="evenodd"%3E%3Cg fill="%23ffffff" fill-opacity="0.1"%3E%3Ccircle cx="30" cy="30" r="2"/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")',
-            animation: 'float 20s ease-in-out infinite'
+          transition: "all 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
+          "&:hover": {
+            transform: "translateY(-2px) scale(1.01)",
+            boxShadow: `0 12px 40px ${alpha(theme.palette.primary.main, 0.15)}`,
           },
-          '@keyframes float': {
-            '0%, 100%': { transform: 'translateX(0px)' },
-            '50%': { transform: 'translateX(-30px)' }
-          }
-        }}>
-          <Box sx={{ position: 'relative', zIndex: 1 }}>
-            <BusinessIcon sx={{ fontSize: 60, mb: 2, color: 'rgba(255,255,255,0.9)' }} />
-            <Typography variant="h3" gutterBottom sx={{ fontWeight: 700, textShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
-              🏢 Companies Directory
-            </Typography>
-            <Typography variant="h6" sx={{ mb: 3, opacity: 0.9, maxWidth: 600, mx: 'auto' }}>
-              Khám phá những công ty tuyệt vời và tìm kiếm cơ hội nghề nghiệp tiếp theo của bạn
-            </Typography>
-            <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, flexWrap: 'wrap' }}>
-              <Chip label={`${filteredCompanies.length} Công ty`} sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white', fontWeight: 600 }} />
-              <Chip label={`${industries.length} Ngành nghề`} sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white', fontWeight: 600 }} />
-              <Chip label="Cập nhật hàng ngày" sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white', fontWeight: 600 }} />
-            </Box>
-          </Box>
-        </Box>
-
-      {/* Search and Filters */}
-      <Paper sx={{ 
-        p: 3, 
-        mb: 3, 
-        borderRadius: 3,
-        background: 'linear-gradient(145deg, #ffffff 0%, #f8f9ff 100%)',
-        boxShadow: '0 8px 32px rgba(102, 126, 234, 0.15)',
-        border: '1px solid rgba(102, 126, 234, 0.1)',
-        position: 'relative',
-        overflow: 'hidden',
-        '&::before': {
-          content: '""',
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: '4px',
-          background: 'linear-gradient(90deg, #667eea, #764ba2, #667eea)',
-          backgroundSize: '200% 100%',
-          animation: 'shimmer 3s ease-in-out infinite'
-        },
-        '@keyframes shimmer': {
-          '0%, 100%': { backgroundPosition: '200% 0' },
-          '50%': { backgroundPosition: '-200% 0' }
-        }
-      }}>
-        <Typography variant="h6" sx={{ mb: 3, color: '#2d3748', fontWeight: 600 }}>
-          🔍 Tìm kiếm & Lọc công ty
-        </Typography>
-        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 2 }}>
-          <Box sx={{ flex: { xs: 1, md: 2 } }}>
-            <TextField
-              fullWidth
-              placeholder="Tìm kiếm công ty theo tên, mô tả..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon sx={{ color: '#667eea' }} />
-                  </InputAdornment>
-                ),
-              }}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: 2,
-                  background: 'white',
-                  '&:hover fieldset': {
-                    borderColor: '#667eea',
-                  },
-                  '&.Mui-focused fieldset': {
-                    borderColor: '#667eea',
-                    borderWidth: '2px'
-                  }
-                }
-              }}
-            />
-          </Box>
-          <Box sx={{ flex: { xs: 1, md: 0.5 } }}>
-            <Button
-              variant="outlined"
-              startIcon={<FilterIcon />}
-              onClick={() => setShowFilters(!showFilters)}
-              fullWidth
-              sx={{
-                height: '56px',
-                borderRadius: 2,
-                borderColor: '#667eea',
-                color: showFilters ? 'white' : '#667eea',
-                background: showFilters ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : 'transparent',
-                '&:hover': {
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  color: 'white',
-                  transform: 'translateY(-1px)',
-                  boxShadow: '0 4px 12px rgba(102, 126, 234, 0.4)'
-                },
-                transition: 'all 0.3s ease'
-              }}
-            >
-              {showFilters ? 'Ẩn bộ lọc' : 'Hiện bộ lọc'}
-            </Button>
-          </Box>
-          <Box sx={{ flex: { xs: 1, md: 0.5 } }}>
-            <Button
-              variant="outlined"
-              startIcon={<ClearIcon />}
-              onClick={clearFilters}
-              fullWidth
-              sx={{
-                height: '56px',
-                borderRadius: 2,
-                borderColor: '#e53e3e',
-                color: '#e53e3e',
-                '&:hover': {
-                  background: '#e53e3e',
-                  color: 'white',
-                  transform: 'translateY(-1px)',
-                  boxShadow: '0 4px 12px rgba(229, 62, 62, 0.4)'
-                },
-                transition: 'all 0.3s ease'
-              }}
-            >
-              Xóa bộ lọc
-            </Button>
-          </Box>
-        </Box>
-
-        {showFilters && (
-          <Box sx={{ mt: 3 }}>
-            <Divider sx={{ mb: 3, backgroundColor: 'rgba(102, 126, 234, 0.2)' }} />
-            <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 2 }}>
-              <Box sx={{ flex: 1 }}>
-                <FormControl fullWidth>
-                  <InputLabel sx={{ color: '#667eea' }}>Ngành nghề</InputLabel>
-                  <Select
-                    value={industryFilter}
-                    onChange={(e) => setIndustryFilter(e.target.value)}
-                    sx={{
-                      borderRadius: 2,
-                      '&:hover .MuiOutlinedInput-notchedOutline': {
-                        borderColor: '#667eea'
-                      },
-                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                        borderColor: '#667eea'
-                      }
-                    }}
-                  >
-                    <MenuItem value="">Tất cả ngành nghề</MenuItem>
-                    {industries.map((industry) => (
-                      <MenuItem key={industry} value={industry}>
-                        {industry}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Box>
-              <Box sx={{ flex: 1 }}>
-                <FormControl fullWidth>
-                  <InputLabel sx={{ color: '#667eea' }}>Quy mô công ty</InputLabel>
-                  <Select
-                    value={sizeFilter}
-                    onChange={(e) => setSizeFilter(e.target.value)}
-                    sx={{
-                      borderRadius: 2,
-                      '&:hover .MuiOutlinedInput-notchedOutline': {
-                        borderColor: '#667eea'
-                      },
-                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                        borderColor: '#667eea'
-                      }
-                    }}
-                  >
-                    <MenuItem value="">Tất cả quy mô</MenuItem>
-                    {companySizes.map((size) => (
-                      <MenuItem key={size} value={size}>
-                        {size} nhân viên
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Box>
-              <Box sx={{ flex: 1 }}>
-                <FormControl fullWidth>
-                  <InputLabel sx={{ color: '#667eea' }}>Địa điểm</InputLabel>
-                  <Select
-                    value={locationFilter}
-                    onChange={(e) => setLocationFilter(e.target.value)}
-                    sx={{
-                      borderRadius: 2,
-                      '&:hover .MuiOutlinedInput-notchedOutline': {
-                        borderColor: '#667eea'
-                      },
-                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                        borderColor: '#667eea'
-                      }
-                    }}
-                  >
-                    <MenuItem value="">Tất cả địa điểm</MenuItem>
-                    {locations.map((location) => (
-                      <MenuItem key={location} value={location}>
-                        {location}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Box>
-            </Box>
+          "&::before": {
+            content: '""',
+            position: "absolute",
+            top: 0,
+            left: "-100%",
+            width: "100%",
+            height: "100%",
+            background: `linear-gradient(90deg, transparent, ${alpha(theme.palette.primary.main, 0.1)}, transparent)`,
+            transition: "left 0.6s ease",
+          },
+          "&:hover::before": {
+            left: "100%",
+          },
+        }}
+        onClick={() => onCompanyClick(company)}
+      >
+        {/* Featured/Hot Badges */}
+        {(company.isFeatured || company.isVerified) && (
+          <Box
+            sx={{
+              position: "absolute",
+              top: 16,
+              left: 16,
+              zIndex: 2,
+              display: "flex",
+              gap: 1,
+            }}
+          >
+            {company.isFeatured && (
+              <Chip
+                label="🔥 Featured"
+                size="small"
+                color="error"
+                sx={{
+                  fontWeight: 700,
+                  animation: `${pulseGlow} 2s ease-in-out infinite`,
+                }}
+              />
+            )}
+            {company.isVerified && (
+              <Chip
+                icon={<Verified />}
+                label="Verified"
+                size="small"
+                color="success"
+                sx={{ fontWeight: 700 }}
+              />
+            )}
           </Box>
         )}
-      </Paper>
 
-      {/* Results Summary */}
-      <Box sx={{ 
-        mb: 3, 
-        p: 2, 
-        background: 'linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%)',
-        borderRadius: 2,
-        border: '1px solid rgba(102, 126, 234, 0.1)'
-      }}>
-        <Typography variant="body1" sx={{ color: '#2d3748', fontWeight: 500 }}>
-          📊 Hiển thị <strong>{paginatedCompanies.length}</strong> trong tổng số <strong>{filteredCompanies.length}</strong> công ty
-          {(industryFilter || sizeFilter || locationFilter) && (
-            <Chip 
-              label="Đã lọc" 
-              size="small" 
-              sx={{ ml: 1, backgroundColor: '#667eea', color: 'white' }} 
-            />
-          )}
-        </Typography>
-      </Box>
-
-      {/* Companies Grid */}
-      {loading ? (
-        <Box sx={{ 
-          display: 'flex', 
-          flexDirection: 'column',
-          justifyContent: 'center', 
-          alignItems: 'center', 
-          py: 8,
-          background: 'white',
-          borderRadius: 3,
-          boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
-        }}>
-          <CircularProgress sx={{ color: '#667eea', mb: 2 }} size={60} />
-          <Typography sx={{ color: '#2d3748', fontSize: '1.1rem' }}>Đang tải danh sách công ty...</Typography>
-          <Typography sx={{ color: '#718096', mt: 1 }}>Vui lòng chờ một chút</Typography>
-        </Box>
-      ) : companies.length === 0 ? (
-        <Box sx={{ 
-          display: 'flex', 
-          flexDirection: 'column',
-          justifyContent: 'center', 
-          alignItems: 'center',
-          py: 8,
-          background: 'white',
-          borderRadius: 3,
-          boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
-        }}>
-          <BusinessIcon sx={{ fontSize: 80, color: '#cbd5e0', mb: 2 }} />
-          <Typography color="text.secondary" sx={{ fontSize: '1.1rem', mb: 1 }}>
-            Không tìm thấy công ty nào phù hợp
-          </Typography>
-          <Typography color="text.secondary" sx={{ fontSize: '0.9rem' }}>
-            Hãy thử điều chỉnh bộ lọc tìm kiếm
-          </Typography>
-        </Box>
-      ) : (
-        <Box sx={{ 
-          display: 'grid', 
-          gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' }, 
-          gap: 3 
-        }}>
-        {paginatedCompanies.map((company) => (
-          <Box key={company.id}>
-            <Card sx={{ 
-              height: '100%', 
-              display: 'flex', 
-              flexDirection: 'column',
-              borderRadius: 3,
-              overflow: 'hidden',
-              background: 'linear-gradient(145deg, #ffffff 0%, #f8f9ff 100%)',
-              boxShadow: '0 4px 20px rgba(102, 126, 234, 0.08)',
-              border: '1px solid rgba(102, 126, 234, 0.1)',
-              position: 'relative',
-              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-              '&:hover': {
-                transform: 'translateY(-8px)',
-                boxShadow: '0 20px 40px rgba(102, 126, 234, 0.2)',
-                '& .company-avatar': {
-                  transform: 'scale(1.1)',
-                  boxShadow: '0 8px 25px rgba(102, 126, 234, 0.3)'
-                },
-                '& .company-actions': {
-                  opacity: 1,
-                  transform: 'translateY(0)'
-                }
+        {/* Bookmark Button */}
+        <Box
+          sx={{
+            position: "absolute",
+            top: 16,
+            right: 16,
+            zIndex: 2,
+          }}
+        >
+          <IconButton
+            onClick={(e) => {
+              e.stopPropagation();
+              onBookmarkClick(company.id);
+            }}
+            sx={{
+              background: alpha(theme.palette.background.paper, 0.9),
+              backdropFilter: "blur(10px)",
+              "&:hover": {
+                background: alpha(theme.palette.primary.main, 0.1),
+                transform: "scale(1.1)",
               },
-              '&::before': {
-                content: '""',
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                height: '4px',
-                background: 'linear-gradient(90deg, #667eea, #764ba2)',
-                transform: 'scaleX(0)',
-                transformOrigin: 'left',
-                transition: 'transform 0.3s ease'
-              },
-              '&:hover::before': {
-                transform: 'scaleX(1)'
-              }
-            }}>
-              <CardContent sx={{ flexGrow: 1, p: 3 }}>
-                <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2 }}>
-                  <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                    <Avatar
-                      className="company-avatar"
-                      sx={{ 
-                        width: 60, 
-                        height: 60, 
-                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                        boxShadow: '0 4px 15px rgba(102, 126, 234, 0.3)',
-                        transition: 'all 0.3s ease',
-                        fontSize: '1.5rem',
-                        fontWeight: 700
-                      }}
-                    >
-                      {company.logo ? (
-                        <img src={company.logo} alt={company.name} width="100%" />
-                      ) : (
-                        getCompanyInitials(company.name)
-                      )}
-                    </Avatar>
-                    <Box>
-                      <Typography variant="h6" component="h3" sx={{ 
-                        fontWeight: 700, 
-                        color: '#2d3748',
-                        mb: 0.5,
-                        fontSize: '1.1rem'
-                      }}>
-                        {company.name}
-                      </Typography>
-                      <Chip 
-                        label={company.industry} 
-                        size="small" 
-                        sx={{ 
-                          backgroundColor: 'rgba(102, 126, 234, 0.1)', 
-                          color: '#667eea',
-                          fontWeight: 500
-                        }} 
-                      />
-                    </Box>
-                  </Box>
-                  <IconButton
-                    size="small"
-                    onClick={() => handleFollowCompany(company.id)}
-                    sx={{
-                      color: company.isFollowing ? '#e53e3e' : '#cbd5e0',
-                      '&:hover': {
-                        color: '#e53e3e',
-                        transform: 'scale(1.2)',
-                        backgroundColor: 'rgba(229, 62, 62, 0.1)'
-                      },
-                      transition: 'all 0.2s ease'
-                    }}
-                  >
-                    {company.isFollowing ? <FavoriteIcon /> : <FavoriteBorderIcon />}
-                  </IconButton>
-                </Box>
+            }}
+          >
+            {isBookmarked ? <Bookmark color="primary" /> : <BookmarkBorder />}
+          </IconButton>
+        </Box>
 
-                <Typography variant="body2" sx={{ 
-                  mb: 3, 
-                  minHeight: 60, 
-                  color: '#4a5568',
-                  lineHeight: 1.6
-                }}>
-                  {company.description ? company.description.substring(0, 120) + '...' : 'Mô tả công ty sẽ được cập nhật...'}
-                </Typography>
+        <CardContent sx={{ p: 3 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 3 }}>
+            <Avatar
+              src={company.logoUrl}
+              sx={{
+                width: 80,
+                height: 80,
+                border: `3px solid ${theme.palette.primary.main}`,
+                boxShadow: `0 4px 12px ${alpha(theme.palette.primary.main, 0.3)}`,
+              }}
+            >
+              {company.companyName.charAt(0)}
+            </Avatar>
 
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mb: 2 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <LocationIcon sx={{ fontSize: 18, mr: 1, color: '#667eea' }} />
-                    <Typography variant="body2" sx={{ color: '#2d3748', fontWeight: 500 }}>
-                      {company.location}
-                    </Typography>
-                  </Box>
+            <Box sx={{ flex: 1 }}>
+              <Typography variant="h5" fontWeight={700} sx={{ mb: 1 }}>
+                {company.companyName}
+              </Typography>
+              <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
+                {company.industry}
+              </Typography>
 
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <PeopleIcon sx={{ fontSize: 18, mr: 1, color: '#667eea' }} />
-                    <Typography variant="body2" sx={{ color: '#2d3748', fontWeight: 500 }}>
-                      {company.size} nhân viên
-                    </Typography>
-                  </Box>
-
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <Rating value={company.rating} precision={0.1} size="small" readOnly 
-                        sx={{ '& .MuiRating-iconFilled': { color: '#fbbf24' } }} 
-                      />
-                      <Typography variant="body2" sx={{ ml: 1, color: '#2d3748', fontWeight: 500 }}>
-                        {company.rating} ({company.totalReviews} đánh giá)
-                      </Typography>
-                    </Box>
-                  </Box>
-                </Box>
-
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 2 }}>
-                  {(company.benefits || []).slice(0, 2).map((benefit, index) => (
-                    <Chip
-                      key={index}
-                      label={benefit}
-                      size="small"
-                      sx={{
-                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                        color: '#10b981',
-                        fontWeight: 500,
-                        '&:hover': {
-                          backgroundColor: 'rgba(16, 185, 129, 0.2)'
-                        }
-                      }}
-                    />
-                  ))}
-                  {(company.benefits || []).length > 2 && (
-                    <Chip
-                      label={`+${(company.benefits || []).length - 2} khác`}
-                      size="small"
-                      sx={{
-                        backgroundColor: 'rgba(107, 114, 128, 0.1)',
-                        color: '#6b7280',
-                        fontWeight: 500
-                      }}
-                    />
-                  )}
-                </Box>
-
-                <Box sx={{ 
-                  display: 'flex', 
-                  justifyContent: 'space-between', 
-                  alignItems: 'center',
-                  p: 2,
-                  backgroundColor: 'rgba(102, 126, 234, 0.05)',
-                  borderRadius: 2,
-                  border: '1px solid rgba(102, 126, 234, 0.1)'
-                }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Badge badgeContent={company.openJobs} color="primary">
-                      <WorkIcon sx={{ color: '#667eea' }} />
-                    </Badge>
-                    <Typography variant="body2" sx={{ color: '#2d3748', fontWeight: 600 }}>
-                      {company.openJobs} việc làm
-                    </Typography>
-                  </Box>
-                  <Typography variant="caption" sx={{ 
-                    color: '#6b7280',
-                    backgroundColor: 'white',
-                    px: 2,
-                    py: 0.5,
-                    borderRadius: 1,
-                    border: '1px solid rgba(107, 114, 128, 0.2)'
-                  }}>
-                    Thành lập {company.founded}
-                  </Typography>
-                </Box>
-              </CardContent>
-
-              <CardActions 
-                className="company-actions"
-                sx={{ 
-                  p: 2, 
-                  pt: 0,
-                  opacity: 0.7,
-                  transform: 'translateY(10px)',
-                  transition: 'all 0.3s ease',
-                  gap: 1
+              <Box
+                sx={{
+                  display: "flex",
+                  gap: 2,
+                  alignItems: "center",
+                  mb: 2,
+                  flexWrap: "wrap",
                 }}
               >
-                <Button
+                <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                  <LocationOn color="action" fontSize="small" />
+                  <Typography variant="body2">{company.location}</Typography>
+                </Box>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                  <People color="action" fontSize="small" />
+                  <Typography variant="body2">
+                    {company.companySize} nhân viên
+                  </Typography>
+                </Box>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                  <Work color="action" fontSize="small" />
+                  <Typography variant="body2">
+                    {company.totalJobs || 0} việc làm
+                  </Typography>
+                </Box>
+                {company.rating && (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                    <Rating value={company.rating} readOnly size="small" />
+                    <Typography variant="body2">{company.rating}/5</Typography>
+                  </Box>
+                )}
+              </Box>
+
+              <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+                <Chip
+                  label={company.companySize}
                   size="small"
-                  startIcon={<ViewIcon />}
-                  onClick={() => handleViewCompany(company)}
                   sx={{
-                    borderRadius: 2,
-                    textTransform: 'none',
+                    background: alpha(getSizeColor(company.companySize), 0.1),
+                    color: getSizeColor(company.companySize),
+                    border: `1px solid ${alpha(getSizeColor(company.companySize), 0.3)}`,
                     fontWeight: 600,
-                    color: '#667eea',
-                    '&:hover': {
-                      backgroundColor: 'rgba(102, 126, 234, 0.1)',
-                      transform: 'translateY(-1px)'
-                    }
                   }}
-                >
-                  Chi tiết
-                </Button>
-                <Button
+                />
+                <Chip
+                  label={company.industry}
                   size="small"
-                  startIcon={<WorkIcon />}
-                  variant="contained"
-                  onClick={() => handleViewJobs(company.id, company.name)}
-                  sx={{
-                    borderRadius: 2,
-                    textTransform: 'none',
-                    fontWeight: 600,
-                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                    '&:hover': {
-                      background: 'linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%)',
-                      transform: 'translateY(-1px)',
-                      boxShadow: '0 6px 20px rgba(102, 126, 234, 0.4)'
-                    }
-                  }}
-                >
-                  Xem việc làm ({company.openJobs})
-                </Button>
-              </CardActions>
-            </Card>
+                  color="primary"
+                  variant="outlined"
+                />
+                {company.foundedYear && (
+                  <Chip
+                    label={`Thành lập ${company.foundedYear}`}
+                    size="small"
+                    variant="outlined"
+                  />
+                )}
+              </Box>
+            </Box>
+
+            <Box
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 2,
+              }}
+            >
+              <Button
+                variant="contained"
+                size="large"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCompanyClick(company);
+                }}
+                sx={{
+                  minWidth: 140,
+                  background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+                  "&:hover": {
+                    transform: "translateY(-2px)",
+                    boxShadow: `0 8px 20px ${alpha(theme.palette.primary.main, 0.4)}`,
+                  },
+                }}
+              >
+                Xem công ty
+              </Button>
+
+              {company.socialLinks && (
+                <Box sx={{ display: "flex", gap: 1 }}>
+                  {company.socialLinks.linkedin && (
+                    <IconButton size="small" sx={{ color: "#0077B5" }}>
+                      <LinkedIn />
+                    </IconButton>
+                  )}
+                  {company.socialLinks.website && (
+                    <IconButton
+                      size="small"
+                      sx={{ color: theme.palette.info.main }}
+                    >
+                      <Public />
+                    </IconButton>
+                  )}
+                </Box>
+              )}
+            </Box>
           </Box>
-        ))}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Grid view
+  return (
+    <Card
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      sx={{
+        height: "100%",
+        cursor: "pointer",
+        position: "relative",
+        overflow: "hidden",
+        background: isHovered
+          ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.02)} 0%, ${alpha(theme.palette.secondary.main, 0.02)} 100%)`
+          : theme.palette.background.paper,
+        border: `2px solid ${isHovered ? theme.palette.primary.main : "transparent"}`,
+        borderRadius: 3,
+        transition: "all 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
+        "&:hover": {
+          transform: "translateY(-8px) scale(1.02)",
+          boxShadow: `0 16px 40px ${alpha(theme.palette.primary.main, 0.2)}`,
+        },
+        "&::before": {
+          content: '""',
+          position: "absolute",
+          top: 0,
+          left: "-100%",
+          width: "100%",
+          height: "100%",
+          background: `linear-gradient(90deg, transparent, ${alpha(theme.palette.primary.main, 0.1)}, transparent)`,
+          transition: "left 0.6s ease",
+        },
+        "&:hover::before": {
+          left: "100%",
+        },
+      }}
+      onClick={() => onCompanyClick(company)}
+    >
+      {/* Badges */}
+      {(company.isFeatured || company.isVerified) && (
+        <Box
+          sx={{
+            position: "absolute",
+            top: 12,
+            left: 12,
+            zIndex: 2,
+            display: "flex",
+            flexDirection: "column",
+            gap: 0.5,
+          }}
+        >
+          {company.isFeatured && (
+            <Chip
+              label="🔥"
+              size="small"
+              color="error"
+              sx={{
+                fontWeight: 700,
+                animation: `${pulseGlow} 2s ease-in-out infinite`,
+                width: 32,
+                height: 32,
+              }}
+            />
+          )}
+          {company.isVerified && (
+            <Chip
+              icon={<Verified />}
+              label=""
+              size="small"
+              color="success"
+              sx={{ width: 32, height: 32 }}
+            />
+          )}
         </Box>
       )}
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <Box sx={{ 
-          display: 'flex', 
-          justifyContent: 'center', 
-          mt: 4,
-          p: 3,
-          background: 'white',
-          borderRadius: 3,
-          boxShadow: '0 4px 20px rgba(102, 126, 234, 0.08)',
-          border: '1px solid rgba(102, 126, 234, 0.1)'
-        }}>
-          <Pagination
-            count={totalPages}
-            page={currentPage}
-            onChange={(event, value) => setCurrentPage(value)}
-            color="primary"
-            size="large"
+      {/* Bookmark */}
+      <Box
+        sx={{
+          position: "absolute",
+          top: 12,
+          right: 12,
+          zIndex: 2,
+        }}
+      >
+        <IconButton
+          onClick={(e) => {
+            e.stopPropagation();
+            onBookmarkClick(company.id);
+          }}
+          size="small"
+          sx={{
+            background: alpha(theme.palette.background.paper, 0.9),
+            backdropFilter: "blur(10px)",
+            "&:hover": {
+              background: alpha(theme.palette.primary.main, 0.1),
+              transform: "scale(1.1)",
+            },
+          }}
+        >
+          {isBookmarked ? <Bookmark color="primary" /> : <BookmarkBorder />}
+        </IconButton>
+      </Box>
+
+      <CardContent
+        sx={{ p: 3, height: "100%", display: "flex", flexDirection: "column" }}
+      >
+        {/* Company Logo & Name */}
+        <Box sx={{ textAlign: "center", mb: 2 }}>
+          <Avatar
+            src={company.logoUrl}
             sx={{
-              '& .MuiPaginationItem-root': {
-                borderRadius: 2,
-                fontWeight: 600,
-                '&:hover': {
-                  backgroundColor: 'rgba(102, 126, 234, 0.1)',
-                  transform: 'translateY(-1px)'
-                },
-                '&.Mui-selected': {
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  color: 'white',
-                  '&:hover': {
-                    background: 'linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%)'
-                  }
-                }
-              }
+              width: 80,
+              height: 80,
+              mx: "auto",
+              mb: 2,
+              border: `3px solid ${theme.palette.primary.main}`,
+              boxShadow: `0 4px 12px ${alpha(theme.palette.primary.main, 0.3)}`,
+            }}
+          >
+            {company.companyName.charAt(0)}
+          </Avatar>
+          <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>
+            {company.companyName}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {company.industry}
+          </Typography>
+        </Box>
+
+        {/* Company Info */}
+        <Stack spacing={1} sx={{ mb: 2, flex: 1 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <LocationOn color="action" fontSize="small" />
+            <Typography variant="body2" noWrap>
+              {company.location}
+            </Typography>
+          </Box>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <People color="action" fontSize="small" />
+            <Typography variant="body2">{company.companySize}</Typography>
+          </Box>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <Work color="action" fontSize="small" />
+            <Typography variant="body2">
+              {company.totalJobs || 0} việc làm
+            </Typography>
+          </Box>
+          {company.rating && (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <Star color="action" fontSize="small" />
+              <Typography variant="body2">{company.rating}/5</Typography>
+            </Box>
+          )}
+        </Stack>
+
+        {/* Tags */}
+        <Box
+          sx={{
+            display: "flex",
+            gap: 0.5,
+            mb: 2,
+            flexWrap: "wrap",
+            justifyContent: "center",
+          }}
+        >
+          <Chip
+            label={company.companySize}
+            size="small"
+            sx={{
+              background: alpha(getSizeColor(company.companySize), 0.1),
+              color: getSizeColor(company.companySize),
+              fontWeight: 600,
             }}
           />
         </Box>
-      )}
 
-      {/* Company Details Dialog */}
-      <Dialog
-        open={companyDialogOpen}
-        onClose={() => setCompanyDialogOpen(false)}
-        maxWidth="md"
-        fullWidth
+        {/* Description */}
+        {company.description && (
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{
+              mb: 2,
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+              lineHeight: 1.4,
+              textAlign: "center",
+            }}
+          >
+            {company.description}
+          </Typography>
+        )}
+
+        {/* Action Button */}
+        <Button
+          variant="contained"
+          fullWidth
+          onClick={(e) => {
+            e.stopPropagation();
+            onCompanyClick(company);
+          }}
+          sx={{
+            background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+            "&:hover": {
+              transform: "translateY(-1px)",
+              boxShadow: `0 4px 12px ${alpha(theme.palette.primary.main, 0.4)}`,
+            },
+          }}
+        >
+          Xem chi tiết
+        </Button>
+      </CardContent>
+    </Card>
+  );
+};
+
+// Company Filters Component
+const CompanyFilters: React.FC<{
+  filters: any;
+  setFilters: (filters: any) => void;
+  onClearFilters: () => void;
+}> = ({ filters, setFilters, onClearFilters }) => {
+  const theme = useTheme();
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
+  const industries = [
+    "Technology",
+    "Healthcare",
+    "Finance",
+    "Education",
+    "Manufacturing",
+    "Retail",
+    "Consulting",
+    "Media",
+    "Transportation",
+    "Real Estate",
+  ];
+
+  const companySizes = [
+    { value: "startup", label: "Startup (1-10)" },
+    { value: "1-50", label: "Small (1-50)" },
+    { value: "51-200", label: "Medium (51-200)" },
+    { value: "201-1000", label: "Large (201-1000)" },
+    { value: "1000+", label: "Enterprise (1000+)" },
+  ];
+
+  const locations = [
+    "Hà Nội",
+    "TP.HCM",
+    "Đà Nẵng",
+    "Cần Thơ",
+    "Hải Phòng",
+    "Bình Dương",
+  ];
+
+  return (
+    <Card
+      sx={{
+        background: `linear-gradient(135deg, 
+          ${alpha(theme.palette.background.paper, 0.95)} 0%, 
+          ${alpha(theme.palette.background.paper, 0.9)} 100%)`,
+        backdropFilter: "blur(20px)",
+        border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+        borderRadius: 3,
+        mb: 3,
+      }}
+    >
+      <CardContent sx={{ p: 3 }}>
+        {/* Filter Toggle */}
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+            flexWrap: "wrap",
+          }}
+        >
+          <Button
+            variant="outlined"
+            startIcon={<Tune />}
+            onClick={() => setFiltersOpen(!filtersOpen)}
+            sx={{
+              borderRadius: 2,
+              borderColor: alpha(theme.palette.primary.main, 0.3),
+              "&:hover": {
+                background: alpha(theme.palette.primary.main, 0.1),
+              },
+            }}
+          >
+            Bộ lọc
+          </Button>
+
+          {/* Quick Filters */}
+          <ToggleButtonGroup
+            value={filters.featured || []}
+            onChange={(_, values) =>
+              setFilters({ ...filters, featured: values })
+            }
+            aria-label="quick filters"
+          >
+            <ToggleButton value="verified" sx={{ borderRadius: 2 }}>
+              <Verified sx={{ mr: 1 }} />
+              Đã xác thực
+            </ToggleButton>
+            <ToggleButton value="featured" sx={{ borderRadius: 2 }}>
+              <LocalFireDepartment sx={{ mr: 1 }} />
+              Nổi bật
+            </ToggleButton>
+            <ToggleButton value="hiring" sx={{ borderRadius: 2 }}>
+              <Work sx={{ mr: 1 }} />
+              Đang tuyển
+            </ToggleButton>
+          </ToggleButtonGroup>
+
+          <Button
+            variant="text"
+            startIcon={<Clear />}
+            onClick={onClearFilters}
+            sx={{
+              color: theme.palette.text.secondary,
+              "&:hover": {
+                color: theme.palette.error.main,
+              },
+            }}
+          >
+            Xóa lọc
+          </Button>
+        </Box>
+
+        {/* Advanced Filters */}
+        <Collapse in={filtersOpen}>
+          <Box
+            sx={{
+              mt: 3,
+              pt: 3,
+              borderTop: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+            }}
+          >
+            <Grid container spacing={3}>
+              {/* Industry */}
+              <Grid item xs={12} md={4}>
+                <Autocomplete
+                  multiple
+                  options={industries}
+                  value={filters.industries || []}
+                  onChange={(_, industries) =>
+                    setFilters({ ...filters, industries })
+                  }
+                  renderTags={(value, getTagProps) =>
+                    value.map((option, index) => (
+                      <Chip
+                        {...getTagProps({ index })}
+                        key={option}
+                        label={option}
+                        color="primary"
+                        variant="outlined"
+                        size="small"
+                      />
+                    ))
+                  }
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Ngành nghề"
+                      placeholder="Chọn ngành..."
+                      sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 } }}
+                    />
+                  )}
+                />
+              </Grid>
+
+              {/* Company Size */}
+              <Grid item xs={12} md={4}>
+                <FormControl fullWidth>
+                  <InputLabel>Quy mô công ty</InputLabel>
+                  <Select
+                    multiple
+                    value={filters.sizes || []}
+                    onChange={(e) =>
+                      setFilters({ ...filters, sizes: e.target.value })
+                    }
+                    label="Quy mô công ty"
+                    sx={{ borderRadius: 2 }}
+                  >
+                    {companySizes.map((size) => (
+                      <MenuItem key={size.value} value={size.value}>
+                        {size.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              {/* Location */}
+              <Grid item xs={12} md={4}>
+                <Autocomplete
+                  multiple
+                  options={locations}
+                  value={filters.locations || []}
+                  onChange={(_, locations) =>
+                    setFilters({ ...filters, locations })
+                  }
+                  renderTags={(value, getTagProps) =>
+                    value.map((option, index) => (
+                      <Chip
+                        {...getTagProps({ index })}
+                        key={option}
+                        label={option}
+                        color="secondary"
+                        variant="outlined"
+                        size="small"
+                      />
+                    ))
+                  }
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Địa điểm"
+                      placeholder="Chọn địa điểm..."
+                      sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 } }}
+                    />
+                  )}
+                />
+              </Grid>
+            </Grid>
+          </Box>
+        </Collapse>
+      </CardContent>
+    </Card>
+  );
+};
+
+const CompaniesPage: React.FC = () => {
+  const { user } = useAuth();
+  const theme = useTheme();
+  const [loading, setLoading] = useState(true);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [filteredCompanies, setFilteredCompanies] = useState<Company[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filters, setFilters] = useState<any>({});
+  const [sortBy, setSortBy] = useState("newest");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [companiesPerPage] = useState(12);
+  const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
+  const [companyDetailOpen, setCompanyDetailOpen] = useState(false);
+  const [bookmarkedCompanies, setBookmarkedCompanies] = useState<string[]>([]);
+
+  useEffect(() => {
+    loadCompanies();
+  }, []);
+
+  useEffect(() => {
+    applyFilters();
+  }, [companies, searchTerm, filters, sortBy]);
+
+  const loadCompanies = async () => {
+    try {
+      setLoading(true);
+      const response = await companiesAPI.getAll();
+      setCompanies(response.data.companies || []);
+    } catch (error) {
+      console.error("Error loading companies:", error);
+      setCompanies([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const applyFilters = () => {
+    let filtered = [...companies];
+
+    // Search filter
+    if (searchTerm) {
+      filtered = filtered.filter(
+        (company) =>
+          company.companyName
+            .toLowerCase()
+            .includes(searchTerm.toLowerCase()) ||
+          company.industry.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          company.location.toLowerCase().includes(searchTerm.toLowerCase()),
+      );
+    }
+
+    // Industry filter
+    if (filters.industries && filters.industries.length > 0) {
+      filtered = filtered.filter((company) =>
+        filters.industries.includes(company.industry),
+      );
+    }
+
+    // Size filter
+    if (filters.sizes && filters.sizes.length > 0) {
+      filtered = filtered.filter((company) =>
+        filters.sizes.includes(company.companySize),
+      );
+    }
+
+    // Location filter
+    if (filters.locations && filters.locations.length > 0) {
+      filtered = filtered.filter((company) =>
+        filters.locations.includes(company.location),
+      );
+    }
+
+    // Feature filters
+    if (filters.featured && filters.featured.length > 0) {
+      if (filters.featured.includes("verified")) {
+        filtered = filtered.filter((company) => company.isVerified);
+      }
+      if (filters.featured.includes("featured")) {
+        filtered = filtered.filter((company) => company.isFeatured);
+      }
+      if (filters.featured.includes("hiring")) {
+        filtered = filtered.filter((company) => (company.totalJobs || 0) > 0);
+      }
+    }
+
+    // Sort
+    filtered.sort((a, b) => {
+      switch (sortBy) {
+        case "name":
+          return a.companyName.localeCompare(b.companyName);
+        case "rating":
+          return (b.rating || 0) - (a.rating || 0);
+        case "jobs":
+          return (b.totalJobs || 0) - (a.totalJobs || 0);
+        case "size":
+          return a.companySize.localeCompare(b.companySize);
+        default:
+          return 0;
+      }
+    });
+
+    setFilteredCompanies(filtered);
+    setCurrentPage(1);
+  };
+
+  const handleSearch = () => {
+    applyFilters();
+  };
+
+  const handleClearFilters = () => {
+    setFilters({});
+    setSearchTerm("");
+  };
+
+  const handleCompanyClick = (company: Company) => {
+    setSelectedCompany(company);
+    setCompanyDetailOpen(true);
+  };
+
+  const handleBookmarkClick = (companyId: string) => {
+    setBookmarkedCompanies((prev) =>
+      prev.includes(companyId)
+        ? prev.filter((id) => id !== companyId)
+        : [...prev, companyId],
+    );
+  };
+
+  // Pagination
+  const indexOfLastCompany = currentPage * companiesPerPage;
+  const indexOfFirstCompany = indexOfLastCompany - companiesPerPage;
+  const currentCompanies = filteredCompanies.slice(
+    indexOfFirstCompany,
+    indexOfLastCompany,
+  );
+  const totalPages = Math.ceil(filteredCompanies.length / companiesPerPage);
+
+  if (loading) {
+    return (
+      <Box
         sx={{
-          '& .MuiDialog-paper': {
-            borderRadius: 3,
-            overflow: 'hidden'
-          }
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          height: "100vh",
+          background: `linear-gradient(135deg, 
+            ${alpha(theme.palette.primary.main, 0.1)} 0%, 
+            ${alpha(theme.palette.secondary.main, 0.1)} 100%)`,
         }}
       >
-        <DialogTitle sx={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: 2,
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          color: 'white',
-          p: 3
-        }}>
-          {selectedCompany && (
-            <>
-              <Avatar sx={{ 
-                bgcolor: 'rgba(255,255,255,0.2)', 
-                width: 60, 
-                height: 60,
-                fontSize: '1.5rem',
-                fontWeight: 700
-              }}>
-                {getCompanyInitials(selectedCompany.name)}
-              </Avatar>
-              <Box>
-                <Typography variant="h5" sx={{ fontWeight: 700 }}>{selectedCompany.name}</Typography>
-                <Typography sx={{ opacity: 0.9, fontSize: '1.1rem' }}>{selectedCompany.industry}</Typography>
-              </Box>
-            </>
-          )}
-        </DialogTitle>
-        <DialogContent sx={{ p: 0 }}>
-          {selectedCompany && (
-            <Box>
-              {/* Company Description */}
-              <Box sx={{ p: 3, backgroundColor: '#f8f9ff' }}>
-                <Typography variant="h6" gutterBottom sx={{ color: '#2d3748', fontWeight: 600 }}>
-                  🏢 Giới thiệu về công ty
-                </Typography>
-                <Typography variant="body1" sx={{ lineHeight: 1.7, color: '#4a5568' }}>
-                  {selectedCompany?.description || 'Mô tả công ty sẽ được cập nhật...'}
-                </Typography>
-              </Box>
+        <Box sx={{ textAlign: "center" }}>
+          <Box
+            sx={{
+              width: 80,
+              height: 80,
+              borderRadius: "50%",
+              background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              animation: `${pulseGlow} 2s ease-in-out infinite`,
+              mb: 2,
+            }}
+          >
+            <Business sx={{ fontSize: 40, color: "white" }} />
+          </Box>
+          <Typography variant="h6" color="primary.main">
+            Đang tải danh sách công ty...
+          </Typography>
+        </Box>
+      </Box>
+    );
+  }
 
-              {/* Company Stats */}
-              <Box sx={{ p: 3 }}>
-                <Box sx={{ 
-                  display: 'grid', 
-                  gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' }, 
-                  gap: 3 
-                }}>
-                  <Box>
-                    <Box sx={{ 
-                      p: 2, 
-                      borderRadius: 2, 
-                      backgroundColor: 'rgba(102, 126, 234, 0.05)',
-                      border: '1px solid rgba(102, 126, 234, 0.1)'
-                    }}>
-                      <Typography variant="subtitle2" gutterBottom sx={{ color: '#667eea', fontWeight: 600 }}>
-                        👥 Quy mô công ty
-                      </Typography>
-                      <Typography variant="body1" sx={{ fontWeight: 600, color: '#2d3748' }}>
-                        {selectedCompany?.size || '0'} nhân viên
-                      </Typography>
-                    </Box>
-                  </Box>
+  return (
+    <Box
+      sx={{
+        flexGrow: 1,
+        minHeight: "100vh",
+        background: `
+          linear-gradient(135deg, 
+            ${alpha(theme.palette.primary.main, 0.05)} 0%, 
+            ${alpha(theme.palette.secondary.main, 0.05)} 50%,
+            ${alpha(theme.palette.info.main, 0.05)} 100%),
+          radial-gradient(circle at 20% 80%, ${alpha(theme.palette.primary.main, 0.1)} 0%, transparent 50%),
+          radial-gradient(circle at 80% 20%, ${alpha(theme.palette.secondary.main, 0.1)} 0%, transparent 50%)
+        `,
+        position: "relative",
+        "&::before": {
+          content: '""',
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23${theme.palette.primary.main.slice(1)}' fill-opacity='0.03'%3E%3Ccircle cx='30' cy='30' r='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+          pointerEvents: "none",
+          zIndex: 0,
+        },
+      }}
+    >
+      <Container maxWidth="xl" sx={{ py: 4, position: "relative", zIndex: 1 }}>
+        {/* Header */}
+        <Slide direction="down" in timeout={800}>
+          <Box sx={{ textAlign: "center", mb: 4 }}>
+            <Typography
+              variant="h3"
+              sx={{
+                fontWeight: 800,
+                mb: 2,
+                background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+              }}
+            >
+              🏢 Khám phá doanh nghiệp
+            </Typography>
+            <Typography
+              variant="h6"
+              color="text.secondary"
+              sx={{ maxWidth: "600px", mx: "auto", lineHeight: 1.7 }}
+            >
+              Tìm hiểu và kết nối với những doanh nghiệp uy tín, môi trường làm
+              việc tuyệt vời
+            </Typography>
+          </Box>
+        </Slide>
 
-                  <Box>
-                    <Box sx={{ 
-                      p: 2, 
-                      borderRadius: 2, 
-                      backgroundColor: 'rgba(16, 185, 129, 0.05)',
-                      border: '1px solid rgba(16, 185, 129, 0.1)'
-                    }}>
-                      <Typography variant="subtitle2" gutterBottom sx={{ color: '#10b981', fontWeight: 600 }}>
-                        📍 Địa điểm
-                      </Typography>
-                      <Typography variant="body1" sx={{ fontWeight: 600, color: '#2d3748' }}>
-                        {selectedCompany?.location || 'Chưa cập nhật'}
-                      </Typography>
-                    </Box>
-                  </Box>
-
-                  <Box>
-                    <Box sx={{ 
-                      p: 2, 
-                      borderRadius: 2, 
-                      backgroundColor: 'rgba(245, 158, 11, 0.05)',
-                      border: '1px solid rgba(245, 158, 11, 0.1)'
-                    }}>
-                      <Typography variant="subtitle2" gutterBottom sx={{ color: '#f59e0b', fontWeight: 600 }}>
-                        ⭐ Đánh giá
-                      </Typography>
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <Rating value={selectedCompany?.rating || 0} precision={0.1} readOnly 
-                          sx={{ '& .MuiRating-iconFilled': { color: '#fbbf24' } }} 
-                        />
-                        <Typography variant="body1" sx={{ ml: 1, fontWeight: 600, color: '#2d3748' }}>
-                          {selectedCompany?.rating || 0} ({selectedCompany?.totalReviews || 0} đánh giá)
-                        </Typography>
-                      </Box>
-                    </Box>
-                  </Box>
-
-                  <Box>
-                    <Box sx={{ 
-                      p: 2, 
-                      borderRadius: 2, 
-                      backgroundColor: 'rgba(139, 92, 246, 0.05)',
-                      border: '1px solid rgba(139, 92, 246, 0.1)'
-                    }}>
-                      <Typography variant="subtitle2" gutterBottom sx={{ color: '#8b5cf6', fontWeight: 600 }}>
-                        💼 Việc làm đang tuyển
-                      </Typography>
-                      <Typography variant="body1" sx={{ fontWeight: 600, color: '#2d3748' }}>
-                        {selectedCompany?.openJobs || 0} vị trí
-                      </Typography>
-                    </Box>
-                  </Box>
-
-                  <Box>
-                    <Box sx={{ 
-                      p: 2, 
-                      borderRadius: 2, 
-                      backgroundColor: 'rgba(236, 72, 153, 0.05)',
-                      border: '1px solid rgba(236, 72, 153, 0.1)'
-                    }}>
-                      <Typography variant="subtitle2" gutterBottom sx={{ color: '#ec4899', fontWeight: 600 }}>
-                        📅 Thành lập
-                      </Typography>
-                      <Typography variant="body1" sx={{ fontWeight: 600, color: '#2d3748' }}>
-                        Năm {selectedCompany?.founded || 'Chưa rõ'}
-                      </Typography>
-                    </Box>
-                  </Box>
-
-                  <Box>
-                    <Box sx={{ 
-                      p: 2, 
-                      borderRadius: 2, 
-                      backgroundColor: 'rgba(59, 130, 246, 0.05)',
-                      border: '1px solid rgba(59, 130, 246, 0.1)'
-                    }}>
-                      <Typography variant="subtitle2" gutterBottom sx={{ color: '#3b82f6', fontWeight: 600 }}>
-                        🌐 Website
-                      </Typography>
-                      <Button
+        {/* Search Bar */}
+        <Card
+          sx={{
+            background: `linear-gradient(135deg, 
+              ${alpha(theme.palette.background.paper, 0.95)} 0%, 
+              ${alpha(theme.palette.background.paper, 0.9)} 100%)`,
+            backdropFilter: "blur(20px)",
+            border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+            borderRadius: 3,
+            mb: 3,
+          }}
+        >
+          <CardContent sx={{ p: 3 }}>
+            <Box sx={{ display: "flex", gap: 2 }}>
+              <TextField
+                fullWidth
+                placeholder="Tìm kiếm công ty, ngành nghề, địa điểm..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <Search color="action" />
+                    </InputAdornment>
+                  ),
+                  endAdornment: searchTerm && (
+                    <InputAdornment position="end">
+                      <IconButton
+                        onClick={() => setSearchTerm("")}
                         size="small"
-                        startIcon={<WebsiteIcon />}
-                        href={selectedCompany?.website || '#'}
-                        target="_blank"
-                        sx={{
-                          textTransform: 'none',
-                          color: '#3b82f6',
-                          fontWeight: 600,
-                          '&:hover': {
-                            backgroundColor: 'rgba(59, 130, 246, 0.1)'
-                          }
-                        }}
                       >
-                        Truy cập website
-                      </Button>
-                    </Box>
-                  </Box>
-                </Box>
-              </Box>
+                        <Clear />
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+                sx={{
+                  "& .MuiOutlinedInput-root": {
+                    borderRadius: 3,
+                    background: alpha(theme.palette.background.paper, 0.8),
+                  },
+                }}
+              />
+              <Button
+                variant="contained"
+                onClick={handleSearch}
+                startIcon={<Search />}
+                sx={{
+                  px: 4,
+                  borderRadius: 3,
+                  background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+                  "&:hover": {
+                    transform: "translateY(-1px)",
+                    boxShadow: `0 8px 20px ${alpha(theme.palette.primary.main, 0.4)}`,
+                  },
+                }}
+              >
+                Tìm kiếm
+              </Button>
+            </Box>
+          </CardContent>
+        </Card>
 
-              {/* Benefits Section */}
-              <Box sx={{ p: 3, backgroundColor: '#f8f9ff' }}>
-                <Typography variant="h6" gutterBottom sx={{ color: '#2d3748', fontWeight: 600, mb: 2 }}>
-                  🎁 Phúc lợi & Quyền lợi
-                </Typography>
-                <Box sx={{ 
-                  display: 'grid', 
-                  gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, 
-                  gap: 1 
-                }}>
-                  {(selectedCompany?.benefits || []).map((benefit, index) => (
-                    <Box key={index}>
-                      <Chip
-                        label={benefit}
-                        sx={{
-                          width: '100%',
-                          justifyContent: 'flex-start',
-                          backgroundColor: 'white',
-                          border: '1px solid rgba(102, 126, 234, 0.2)',
-                          color: '#2d3748',
-                          fontWeight: 500,
-                          '&:hover': {
-                            backgroundColor: 'rgba(102, 126, 234, 0.1)'
-                          }
-                        }}
-                      />
-                    </Box>
-                  ))}
-                </Box>
-              </Box>
+        {/* Filters */}
+        <CompanyFilters
+          filters={filters}
+          setFilters={setFilters}
+          onClearFilters={handleClearFilters}
+        />
 
-              {/* Reviews Section */}
-              <Box sx={{ p: 3 }}>
-                <Typography variant="h6" gutterBottom sx={{ color: '#2d3748', fontWeight: 600, mb: 2 }}>
-                  💬 Đánh giá gần đây
-                </Typography>
-                <List sx={{ p: 0 }}>
-                  {companyReviews.slice(0, 2).map((review) => (
-                    <ListItem key={review.id} sx={{ 
-                      px: 0, 
-                      mb: 2,
-                      p: 2,
-                      borderRadius: 2,
-                      backgroundColor: 'rgba(249, 250, 251, 0.8)',
-                      border: '1px solid rgba(229, 231, 235, 0.8)'
-                    }}>
-                      <ListItemText
-                        primary={
-                          <Box sx={{ mb: 1 }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                              <Rating value={review.rating} size="small" readOnly 
-                                sx={{ '& .MuiRating-iconFilled': { color: '#fbbf24' } }} 
-                              />
-                              <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#2d3748' }}>
-                                {review.title}
-                              </Typography>
-                            </Box>
-                            <Typography variant="body2" sx={{ color: '#4a5568', lineHeight: 1.6 }}>
-                              {review.review}
-                            </Typography>
-                          </Box>
-                        }
-                        secondary={
-                          <Typography variant="caption" sx={{ color: '#6b7280', fontWeight: 500 }}>
-                            {review.position} • {review.date}
-                          </Typography>
-                        }
-                      />
-                    </ListItem>
-                  ))}
-                </List>
+        {/* Controls Bar */}
+        <Card
+          sx={{
+            background: `linear-gradient(135deg, 
+              ${alpha(theme.palette.background.paper, 0.9)} 0%, 
+              ${alpha(theme.palette.background.paper, 0.7)} 100%)`,
+            backdropFilter: "blur(20px)",
+            border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+            borderRadius: 2,
+            mb: 3,
+          }}
+        >
+          <CardContent sx={{ py: 2 }}>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <Typography variant="body1" fontWeight={600}>
+                {filteredCompanies.length} công ty được tìm thấy
+              </Typography>
+
+              <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                {/* Sort */}
+                <FormControl size="small" sx={{ minWidth: 120 }}>
+                  <InputLabel>Sắp xếp</InputLabel>
+                  <Select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    label="Sắp xếp"
+                    sx={{ borderRadius: 2 }}
+                  >
+                    <MenuItem value="newest">Mới nhất</MenuItem>
+                    <MenuItem value="name">Tên A-Z</MenuItem>
+                    <MenuItem value="rating">Đánh giá cao</MenuItem>
+                    <MenuItem value="jobs">Nhiều việc làm</MenuItem>
+                  </Select>
+                </FormControl>
+
+                {/* View Mode */}
+                <ToggleButtonGroup
+                  value={viewMode}
+                  exclusive
+                  onChange={(_, mode) => mode && setViewMode(mode)}
+                  aria-label="view mode"
+                >
+                  <ToggleButton value="grid" aria-label="grid view">
+                    <ViewModule />
+                  </ToggleButton>
+                  <ToggleButton value="list" aria-label="list view">
+                    <ViewList />
+                  </ToggleButton>
+                </ToggleButtonGroup>
               </Box>
             </Box>
+          </CardContent>
+        </Card>
+
+        {/* Companies Grid/List */}
+        {currentCompanies.length === 0 ? (
+          <Card sx={{ p: 8, textAlign: "center" }}>
+            <Typography variant="h6" gutterBottom>
+              Không tìm thấy công ty phù hợp
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              Thử điều chỉnh bộ lọc hoặc từ khóa tìm kiếm
+            </Typography>
+            <Button
+              variant="outlined"
+              startIcon={<Refresh />}
+              onClick={handleClearFilters}
+            >
+              Xóa bộ lọc
+            </Button>
+          </Card>
+        ) : (
+          <Grid
+            container
+            spacing={3}
+            sx={{
+              ...(viewMode === "list" && {
+                flexDirection: "column",
+                "& .MuiGrid-item": {
+                  maxWidth: "100%",
+                },
+              }),
+            }}
+          >
+            {currentCompanies.map((company, index) => (
+              <Grid
+                item
+                xs={12}
+                sm={viewMode === "grid" ? 6 : 12}
+                md={viewMode === "grid" ? 4 : 12}
+                lg={viewMode === "grid" ? 3 : 12}
+                key={company.id}
+              >
+                <Fade in timeout={600 + index * 100}>
+                  <div>
+                    <CompanyCard
+                      company={company}
+                      viewMode={viewMode}
+                      onCompanyClick={handleCompanyClick}
+                      onBookmarkClick={handleBookmarkClick}
+                      isBookmarked={bookmarkedCompanies.includes(company.id)}
+                    />
+                  </div>
+                </Fade>
+              </Grid>
+            ))}
+          </Grid>
+        )}
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
+            <Pagination
+              count={totalPages}
+              page={currentPage}
+              onChange={(_, page) => setCurrentPage(page)}
+              color="primary"
+              size="large"
+              sx={{
+                "& .MuiPaginationItem-root": {
+                  borderRadius: 2,
+                  "&:hover": {
+                    transform: "scale(1.1)",
+                  },
+                },
+              }}
+            />
+          </Box>
+        )}
+
+        {/* Company Detail Dialog */}
+        <Dialog
+          open={companyDetailOpen}
+          onClose={() => setCompanyDetailOpen(false)}
+          maxWidth="md"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              background: alpha(theme.palette.background.paper, 0.95),
+              backdropFilter: "blur(20px)",
+              border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+            },
+          }}
+        >
+          {selectedCompany && (
+            <>
+              <DialogTitle
+                sx={{
+                  background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)}, ${alpha(theme.palette.secondary.main, 0.1)})`,
+                  fontWeight: 700,
+                  fontSize: "1.5rem",
+                }}
+              >
+                <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                  <Avatar
+                    src={selectedCompany.logoUrl}
+                    sx={{ width: 48, height: 48 }}
+                  >
+                    {selectedCompany.companyName.charAt(0)}
+                  </Avatar>
+                  <Box>
+                    <Typography variant="h6" fontWeight={700}>
+                      {selectedCompany.companyName}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {selectedCompany.industry}
+                    </Typography>
+                  </Box>
+                </Box>
+              </DialogTitle>
+              <DialogContent sx={{ p: 4 }}>
+                <Grid container spacing={3}>
+                  <Grid item xs={12} md={6}>
+                    <Typography
+                      variant="subtitle2"
+                      color="textSecondary"
+                      fontWeight={600}
+                    >
+                      Địa điểm
+                    </Typography>
+                    <Typography variant="body1" gutterBottom>
+                      {selectedCompany.location}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography
+                      variant="subtitle2"
+                      color="textSecondary"
+                      fontWeight={600}
+                    >
+                      Quy mô
+                    </Typography>
+                    <Typography variant="body1" gutterBottom>
+                      {selectedCompany.companySize} nhân viên
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography
+                      variant="subtitle2"
+                      color="textSecondary"
+                      fontWeight={600}
+                    >
+                      Năm thành lập
+                    </Typography>
+                    <Typography variant="body1" gutterBottom>
+                      {selectedCompany.foundedYear}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography
+                      variant="subtitle2"
+                      color="textSecondary"
+                      fontWeight={600}
+                    >
+                      Đánh giá
+                    </Typography>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      <Rating value={selectedCompany.rating} readOnly />
+                      <Typography variant="body1">
+                        {selectedCompany.rating}/5
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Typography
+                      variant="subtitle2"
+                      color="textSecondary"
+                      fontWeight={600}
+                      gutterBottom
+                    >
+                      Mô tả
+                    </Typography>
+                    <Typography variant="body1" sx={{ lineHeight: 1.7 }}>
+                      {selectedCompany.description ||
+                        "Mô tả công ty sẽ được cập nhật sau..."}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Typography
+                      variant="subtitle2"
+                      color="textSecondary"
+                      fontWeight={600}
+                      gutterBottom
+                    >
+                      Thông tin khác
+                    </Typography>
+                    <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+                      <Chip
+                        label={`${selectedCompany.totalJobs} việc làm`}
+                        color="primary"
+                      />
+                      {selectedCompany.isVerified && (
+                        <Chip
+                          icon={<Verified />}
+                          label="Đã xác thực"
+                          color="success"
+                        />
+                      )}
+                      {selectedCompany.isFeatured && (
+                        <Chip label="Nổi bật" color="error" />
+                      )}
+                    </Box>
+                  </Grid>
+                </Grid>
+              </DialogContent>
+              <DialogActions sx={{ p: 3, gap: 2 }}>
+                <Button
+                  onClick={() => setCompanyDetailOpen(false)}
+                  variant="outlined"
+                  sx={{ borderRadius: 2 }}
+                >
+                  Đóng
+                </Button>
+                <Button
+                  onClick={() => handleBookmarkClick(selectedCompany.id)}
+                  variant="outlined"
+                  startIcon={
+                    bookmarkedCompanies.includes(selectedCompany.id) ? (
+                      <Bookmark />
+                    ) : (
+                      <BookmarkBorder />
+                    )
+                  }
+                  color={
+                    bookmarkedCompanies.includes(selectedCompany.id)
+                      ? "primary"
+                      : "inherit"
+                  }
+                  sx={{ borderRadius: 2 }}
+                >
+                  {bookmarkedCompanies.includes(selectedCompany.id)
+                    ? "Đã lưu"
+                    : "Lưu công ty"}
+                </Button>
+                <Button
+                  variant="contained"
+                  startIcon={<Work />}
+                  sx={{
+                    borderRadius: 2,
+                    background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+                  }}
+                >
+                  Xem việc làm
+                </Button>
+              </DialogActions>
+            </>
           )}
-        </DialogContent>
-        <DialogActions sx={{ 
-          p: 3, 
-          backgroundColor: '#f8f9ff',
-          gap: 1
-        }}>
-          <Button 
-            onClick={() => setCompanyDialogOpen(false)}
-            sx={{
-              borderRadius: 2,
-              textTransform: 'none',
-              color: '#6b7280',
-              fontWeight: 600
-            }}
-          >
-            Đóng
-          </Button>
-          <Button 
-            variant="outlined" 
-            startIcon={<WorkIcon />}
-            onClick={() => selectedCompany && handleViewJobs(selectedCompany.id, selectedCompany.name)}
-            sx={{
-              borderRadius: 2,
-              textTransform: 'none',
-              borderColor: '#667eea',
-              color: '#667eea',
-              fontWeight: 600,
-              '&:hover': {
-                backgroundColor: 'rgba(102, 126, 234, 0.1)',
-                borderColor: '#667eea'
-              }
-            }}
-          >
-            Xem tất cả việc làm
-          </Button>
-          <Button 
-            variant="contained" 
-            startIcon={<FavoriteIcon />}
-            onClick={() => selectedCompany && handleFollowCompany(selectedCompany.id)}
-            sx={{
-              borderRadius: 2,
-              textTransform: 'none',
-              background: selectedCompany?.isFollowing 
-                ? 'linear-gradient(135deg, #e53e3e 0%, #dc2626 100%)'
-                : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              fontWeight: 600,
-              '&:hover': {
-                background: selectedCompany?.isFollowing
-                  ? 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)'
-                  : 'linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%)',
-                boxShadow: '0 6px 20px rgba(102, 126, 234, 0.4)'
-              }
-            }}
-          >
-            {selectedCompany?.isFollowing ? 'Bỏ theo dõi' : 'Theo dõi công ty'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-      </Box>
+        </Dialog>
+      </Container>
     </Box>
   );
 };

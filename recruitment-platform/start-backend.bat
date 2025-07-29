@@ -1,4 +1,4 @@
 @echo off
-echo Starting Backend Server...
-cd /d "c:\KA\recruitment-platform\backend"
+echo Starting backend server...
+cd backend
 npm run dev

@@ -17,10 +17,12 @@
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "db:reset": "prisma migrate reset"
+    "db:reset": "prisma migrate reset",
+    "db:progress-migration": "tsx src/scripts/run-progress-migration.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
+    "axios": "^1.11.0",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^1.41.0",
     "compression": "^1.7.4",
@@ -49,7 +51,7 @@
     "@types/jest": "^29.5.8",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/morgan": "^1.9.9",
-    "@types/multer": "^1.4.11",
+    "@types/multer": "^1.4.13",
     "@types/node": "^20.9.0",
     "@types/nodemailer": "^6.4.14",
     "@types/uuid": "^9.0.7",

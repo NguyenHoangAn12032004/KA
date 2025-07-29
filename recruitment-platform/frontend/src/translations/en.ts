@@ -1,0 +1,130 @@
+export default {
+  common: {
+    loading: 'Loading...',
+    error: 'An error occurred',
+    success: 'Success',
+    save: 'Save',
+    cancel: 'Cancel',
+    edit: 'Edit',
+    delete: 'Delete',
+    confirm: 'Confirm',
+    back: 'Back',
+    next: 'Next',
+    submit: 'Submit',
+    search: 'Search',
+    filter: 'Filter',
+    sort: 'Sort',
+    view: 'View',
+    download: 'Download',
+    print: 'Print',
+    share: 'Share',
+    close: 'Close',
+    clear: 'Clear',
+    all: 'All',
+    more: 'More',
+    less: 'Less'
+  },
+  auth: {
+    login: 'Login',
+    register: 'Register',
+    logout: 'Logout',
+    email: 'Email',
+    password: 'Password',
+    forgotPassword: 'Forgot password?',
+    loginSuccess: 'Login successful',
+    loginError: 'Login failed',
+    registerSuccess: 'Registration successful',
+    registerError: 'Registration failed'
+  },
+  job: {
+    list: 'Job Listings',
+    exploreOpportunities: 'Explore Job Opportunities',
+    findYourDream: 'Find your dream job',
+    searchPlaceholder: 'Search by title, company or skills...',
+    filters: 'Filters',
+    type: 'Job Type',
+    workMode: 'Work Mode',
+    experienceLevel: 'Experience Level',
+    location: 'Location',
+    salaryRange: 'Salary Range',
+    allSalaries: 'All Salaries',
+    clearFilters: 'Clear Filters',
+    applyFilters: 'Apply Filters',
+    noMatch: 'No matching jobs found',
+    adjustFilters: 'Please adjust your filters or try a different search',
+    newJobAlert: 'A new job has been posted',
+    newJobsAlert: '{{count}} new jobs have been posted',
+    refresh: 'Refresh',
+    views: 'Views',
+    applicants: 'Applicants',
+    matchScore: 'Match Score',
+    applied: 'Applied',
+    apply: 'Apply',
+    saved: 'Job saved',
+    unsaved: 'Job removed from saved',
+    negotiable: 'Negotiable',
+    noTitle: 'No title',
+    unknownCompany: 'Unknown company',
+    noDescription: 'No description available',
+    postedOn: 'Posted on {{date}}',
+    applications: '{{count}} applicants',
+    save: 'Save',
+    types: {
+      full_time: 'Full Time',
+      part_time: 'Part Time',
+      internship: 'Internship',
+      contract: 'Contract'
+    },
+    workModes: {
+      onsite: 'On-site',
+      remote: 'Remote',
+      hybrid: 'Hybrid'
+    },
+    experienceLevels: {
+      entry: 'Entry Level',
+      junior: 'Junior',
+      intermediate: 'Intermediate',
+      senior: 'Senior'
+    },
+    sort: {
+      newest: 'Newest',
+      salaryHigh: 'Highest Salary',
+      salaryLow: 'Lowest Salary',
+      relevance: 'Most Relevant'
+    }
+  },
+  jobs: {
+    postedOn: 'Posted on {{date}}',
+    applications: '{{count}} applicants',
+    apply: 'Apply',
+    applied: 'Applied',
+    save: 'Save',
+    saved: 'Saved'
+  },
+  application: {
+    submitSuccess: 'Application submitted successfully',
+    submitError: 'Error submitting application',
+    review: 'Review Application',
+    coverLetter: 'Cover Letter',
+    additionalFiles: 'Additional Files',
+    preview: 'Preview',
+    submit: 'Submit',
+    submitting: 'Submitting...',
+    status: {
+      pending: 'Pending Review',
+      reviewing: 'Under Review',
+      shortlisted: 'Shortlisted',
+      interview: 'Interview',
+      offer: 'Offer Extended',
+      rejected: 'Rejected',
+      withdrawn: 'Withdrawn'
+    }
+  },
+  error: {
+    general: 'An error occurred. Please try again later.',
+    loadJobs: 'Could not load job listings',
+    fetchJobs: 'Could not fetch job listings',
+    submitApplication: 'Could not submit application',
+    loginRequired: 'Please login to perform this action'
+  }
+}; 

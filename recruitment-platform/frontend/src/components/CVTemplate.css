@@ -1,0 +1,111 @@
+/* CV Template Accessibility Styles */
+
+/* Ensure text is readable in all modes */
+.CVTemplate-paper {
+  /* Ensure minimum contrast ratio */
+  --min-contrast-ratio: 4.5;
+}
+
+/* High contrast mode specific styles */
+@media (prefers-contrast: high) {
+  .CVTemplate-paper {
+    /* Increase border width for better visibility */
+    border-width: 3px !important;
+    /* Ensure strong borders */
+    border-style: solid !important;
+    /* Remove decorative elements */
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .CVTemplate-paper .MuiTypography-root {
+    /* Increase font weight for better readability */
+    font-weight: 500 !important;
+  }
+
+  .CVTemplate-paper a {
+    /* Make links clearly distinguishable */
+    text-decoration: underline !important;
+    font-weight: 700 !important;
+  }
+
+  .CVTemplate-paper .MuiDivider-root {
+    /* Make dividers more visible */
+    border-width: 2px !important;
+  }
+
+  .CVTemplate-paper .MuiChip-root {
+    /* Make chips more visible */
+    border-width: 2px !important;
+  }
+}
+
+/* Dark mode specific styles */
+@media (prefers-color-scheme: dark) {
+  .CVTemplate-paper {
+    /* Ensure background is dark enough */
+    background-color: #121212 !important;
+    color: #ffffff !important;
+  }
+
+  .CVTemplate-paper .MuiTypography-root {
+    color: #ffffff !important;
+  }
+
+  .CVTemplate-paper .MuiTypography-colorTextSecondary {
+    color: #aaaaaa !important;
+  }
+}
+
+/* Print styles - ensure CV is readable when printed */
+@media print {
+  .CVTemplate-paper {
+    background-color: white !important;
+    color: black !important;
+    border: none !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+  }
+
+  .CVTemplate-paper .MuiTypography-root {
+    color: black !important;
+  }
+
+  .CVTemplate-paper .MuiTypography-colorTextSecondary {
+    color: #555555 !important;
+  }
+
+  .CVTemplate-paper .MuiLinearProgress-root {
+    border: 1px solid #000000;
+  }
+
+  /* Hide download button when printing */
+  .CVTemplate-downloadBtn {
+    display: none !important;
+  }
+}
+
+/* Accessibility focus styles */
+.CVTemplate-paper a:focus,
+.CVTemplate-paper button:focus {
+  outline: 3px solid #2196f3 !important;
+  outline-offset: 2px !important;
+}
+
+/* Ensure links are recognizable */
+.CVTemplate-paper a:hover {
+  text-decoration: underline !important;
+}
+
+/* Ensure skill bars have good contrast */
+.CVTemplate-paper .MuiLinearProgress-root {
+  min-height: 6px;
+}
+
+/* Ensure icons are visible */
+.CVTemplate-paper .MuiSvgIcon-root {
+  font-size: 1.2rem;
+} 

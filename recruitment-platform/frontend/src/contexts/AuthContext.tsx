@@ -1,28 +1,14 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import { authAPI } from '../services/api';
 
+// Define types
 interface User {
   id: string;
   email: string;
-  role: 'ADMIN' | 'STUDENT' | 'COMPANY';
-  studentProfile?: {
-    firstName: string;
-    lastName: string;
-    university?: string;
-    major?: string;
-    graduationYear?: number;
-    skills?: string[];
-    resumeUrl?: string;
-  };
-  companyProfile?: {
-    companyName: string;
-    industry?: string;
-    description?: string;
-    website?: string;
-    logoUrl?: string;
-  };
-  createdAt: string;
-  updatedAt: string;
+  role: string;
+  studentProfile?: any;
+  companyProfile?: any;
+  [key: string]: any;
 }
 
 interface AuthContextType {
@@ -30,11 +16,24 @@ interface AuthContextType {
   token: string | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (userData: any) => Promise<void>;
+  register: (userData: RegisterData) => Promise<void>;
   logout: () => void;
   updateUser: (userData: Partial<User>) => void;
   refreshUserData: () => Promise<void>;
   clearCacheAndReload: () => void;
+}
+
+interface AuthProviderProps {
+  children: ReactNode;
+}
+
+interface RegisterData {
+  email: string;
+  password: string;
+  role: string;
+  firstName?: string;
+  lastName?: string;
+  companyName?: string;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -47,186 +46,102 @@ export const useAuth = (): AuthContextType => {
   return context;
 };
 
-interface AuthProviderProps {
-  children: ReactNode;
-}
-
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Initialize auth state from localStorage
   useEffect(() => {
-    const initializeAuth = () => {
-      try {
-        const storedToken = localStorage.getItem('token');
-        const storedUser = localStorage.getItem('user');
+    // Check for existing auth
+    const storedToken = localStorage.getItem('token');
+    const storedUser = localStorage.getItem('user');
 
-        if (storedToken && storedUser && storedUser !== 'undefined' && storedToken !== 'null') {
-          // Validate token format before using it
-          const cleanToken = storedToken.trim();
-          if (cleanToken && cleanToken.length > 10) {
-            setToken(cleanToken);
-            setUser(JSON.parse(storedUser));
-            console.log('🔑 Auth initialized with token:', cleanToken.substring(0, 20) + '...');
-          } else {
-            console.warn('⚠️ Invalid token format, clearing auth data');
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
-          }
-        } else {
-          console.log('🔓 No valid auth data found');
-        }
-      } catch (error) {
-        console.error('❌ Error initializing auth:', error);
-        // Clear invalid data
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    initializeAuth();
+    if (storedToken && storedUser) {
+      setToken(storedToken);
+      setUser(JSON.parse(storedUser));
+      
+      // Verify token validity
+      verifyToken();
+    }
+    setLoading(false);
   }, []);
+  
+  // Verify token validity
+  const verifyToken = async () => {
+    try {
+      console.log('🔄 Verifying token validity...');
+      const response = await authAPI.getCurrentUser();
+      if (response.data?.success) {
+        console.log('✅ Token is valid, user data:', response.data.data);
+        // Update user data if needed
+        updateUser(response.data.data);
+      } else {
+        console.warn('⚠️ Token verification failed, logging out');
+        logout();
+      }
+    } catch (error) {
+      console.error('❌ Token verification error:', error);
+      // If token is invalid, logout
+      logout();
+    }
+  };
 
-  const login = async (email: string, password: string): Promise<void> => {
+  const login = async (email: string, password: string) => {
     try {
       console.log('🔐 Attempting login for:', email);
       const response = await authAPI.login(email, password);
+      console.log('🔍 Login response:', response);
       
-      if (response.success) {
-        const { user: userData, token: userToken } = response.data;
+      // Check success using data.success or direct user/token
+      if ((response.data?.success && response.data?.data?.token && response.data?.data?.user) || 
+          (response.data?.token && response.data?.user)) {
         
-        console.log('✅ Login successful for user:', userData);
-        console.log('🔑 Token received:', userToken.substring(0, 20) + '...');
+        // Get user and token from response structure
+        let token, user;
+        if (response.data?.success) {
+          // Format: { success: true, data: { token, user } }
+          token = response.data.data.token;
+          user = response.data.data.user;
+        } else {
+          // Format: { token, user }
+          token = response.data.token;
+          user = response.data.user;
+        }
         
-        setUser(userData);
-        setToken(userToken);
+        console.log('🔑 Token received');
+        console.log('👤 User data received:', user);
         
-        // Store in localStorage
-        localStorage.setItem('token', userToken);
-        localStorage.setItem('user', JSON.stringify(userData));
+        // Set state and localStorage
+        setToken(token);
+        setUser(user);
         
-        // Don't auto-sync on login to avoid overwriting user data
-        console.log('✅ Login completed successfully for:', userData.email);
+        localStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(user));
         
+        return;
       } else {
-        throw new Error(response.message || 'Login failed');
+        console.error('🔒 Invalid response format:', response);
+        throw new Error('Invalid response from server');
       }
     } catch (error: any) {
-      console.log('❌ Login failed, checking demo accounts...');
-      
-      // Special handling for nguyenvanan@example.com
-      if (email === 'nguyenvanan@example.com' && password === 'password123') {
-        console.log('🎯 Using demo account for Nguyen Van An');
-        const nguyenVanAnAccount = {
-          id: 'nguyen-van-an-001',
-          email: 'nguyenvanan@example.com',
-          role: 'STUDENT' as const,
-          studentProfile: {
-            firstName: 'An',
-            lastName: 'Nguyen Van',
-            university: 'Hanoi University of Science and Technology',
-            major: 'Computer Science',
-            graduationYear: 2024,
-            skills: ['JavaScript', 'React', 'Node.js', 'Python', 'SQL', 'Git', 'Docker'],
-            gpa: '3.7/4.0'
-          },
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-        
-        const demoToken = `nguyen-van-an-token-${Date.now()}`;
-        
-        setUser(nguyenVanAnAccount);
-        setToken(demoToken);
-        
-        // Store in localStorage
-        localStorage.setItem('token', demoToken);
-        localStorage.setItem('user', JSON.stringify(nguyenVanAnAccount));
-        console.log('✅ Nguyen Van An logged in successfully');
-        return;
-      }
-      
-      // Fallback for demo accounts when backend is not available
-      const demoAccounts = {
-        'admin@recruitment.com': {
-          id: 'demo-admin',
-          email: 'admin@recruitment.com',
-          role: 'ADMIN' as const,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        },
-        'student@demo.com': {
-          id: 'demo-student',
-          email: 'student@demo.com',
-          role: 'STUDENT' as const,
-          studentProfile: {
-            firstName: 'Test',
-            lastName: 'Student',
-            university: 'Demo University',
-            major: 'Computer Science',
-            graduationYear: 2025,
-            skills: ['React', 'TypeScript', 'Node.js']
-          },
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        },
-        'company@demo.com': {
-          id: 'demo-company',
-          email: 'company@demo.com',
-          role: 'COMPANY' as const,
-          companyProfile: {
-            companyName: 'TechCorp Vietnam',
-            industry: 'Technology',
-            description: 'Leading technology company in Vietnam',
-            website: 'https://techcorp.vn'
-          },
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        }
-      };
-
-      // Check if it's a demo account
-      const demoUser = demoAccounts[email as keyof typeof demoAccounts];
-      if (demoUser && (password === 'admin123' || password === 'demo123')) {
-        const demoToken = `demo-token-${Date.now()}`;
-        
-        setUser(demoUser);
-        setToken(demoToken);
-        
-        // Store in localStorage
-        localStorage.setItem('token', demoToken);
-        localStorage.setItem('user', JSON.stringify(demoUser));
-        return;
-      }
-
-      // If not a demo account or wrong password, throw original error
+      console.error('❌ Login failed:', error);
       throw new Error(error.response?.data?.message || error.message || 'Lỗi kết nối. Vui lòng thử lại sau.');
     }
   };
 
-  const register = async (userData: {
-    email: string;
-    password: string;
-    role: string;
-    firstName?: string;
-    lastName?: string;
-    companyName?: string;
-  }): Promise<void> => {
+  const register = async (userData: RegisterData): Promise<void> => {
     try {
       const response = await authAPI.register(userData);
       
-      if (!response.success) {
-        throw new Error(response.message || 'Registration failed');
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || 'Registration failed');
       }
-      
+
       // Note: After registration, user needs to login
-      // Some systems auto-login after registration, but we'll require manual login for security
+      return;
     } catch (error: any) {
-      throw new Error(error.response?.data?.message || error.message || 'Registration failed');
+      console.error('Registration failed:', error);
+      throw new Error(error.response?.data?.message || error.message || 'Lỗi đăng ký. Vui lòng thử lại sau.');
     }
   };
 
@@ -264,13 +179,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       console.log('🔄 Refreshing user data from backend...');
       const response = await authAPI.getCurrentUser();
-      if (response.success) {
+      if (response.data?.success) {
         console.log('✅ User data refreshed:', response.data);
-        setUser(response.data);
-        localStorage.setItem('user', JSON.stringify(response.data));
+        setUser(response.data.data);
+        localStorage.setItem('user', JSON.stringify(response.data.data));
       }
     } catch (error) {
-      console.warn('⚠️ Could not refresh user data:', error);
+      console.error('Failed to refresh user data:', error);
     }
   };
 

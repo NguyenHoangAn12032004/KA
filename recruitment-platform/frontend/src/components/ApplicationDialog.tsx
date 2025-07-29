@@ -43,6 +43,7 @@ import {
   Edit,
   CloudUpload
 } from '@mui/icons-material';
+import { useTranslation } from '../contexts/LanguageContext';
 
 interface Job {
   id: string;
@@ -52,15 +53,15 @@ interface Job {
     companyName: string;
     logoUrl?: string;
     industry?: string;
-  };
+  } | string;
   location: string;
   salary?: string;
   salaryMin?: number;
   salaryMax?: number;
   currency?: string;
-  type: 'FULL_TIME' | 'PART_TIME' | 'INTERNSHIP' | 'CONTRACT';
-  workMode?: 'ONSITE' | 'REMOTE' | 'HYBRID';
-  experienceLevel?: 'ENTRY' | 'JUNIOR' | 'INTERMEDIATE' | 'SENIOR';
+  type: 'FULL_TIME' | 'PART_TIME' | 'INTERNSHIP' | 'CONTRACT' | string;
+  workMode?: 'ONSITE' | 'REMOTE' | 'HYBRID' | string;
+  experienceLevel?: 'ENTRY' | 'JUNIOR' | 'INTERMEDIATE' | 'SENIOR' | string;
   requirements?: string[];
   hasApplied?: boolean;
 }
@@ -84,6 +85,7 @@ const ApplicationDialog: React.FC<ApplicationDialogProps> = ({
   const [coverLetter, setCoverLetter] = useState('');
   const [additionalFiles, setAdditionalFiles] = useState<File[]>([]);
   const [showPreview, setShowPreview] = useState(false);
+  const { t } = useTranslation();
 
   const steps = ['Review Job', 'Cover Letter', 'Review & Submit'];
 
@@ -154,23 +156,21 @@ const ApplicationDialog: React.FC<ApplicationDialogProps> = ({
     setAdditionalFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  const generateCoverLetterTemplate = () => {
-    if (!job) return '';
-    
+  const generateDefaultCoverLetter = (job: Job) => {
     return `Dear Hiring Manager,
 
-I am writing to express my strong interest in the ${job.title} position at ${job.company?.companyName || 'your company'}. With my background and skills, I believe I would be a valuable addition to your team.
+I am writing to express my strong interest in the ${job.title} position at ${typeof job.company === 'object' ? job.company?.companyName : job.company || 'your company'}. With my background and skills, I believe I would be a valuable addition to your team.
 
 Key qualifications I bring:
 • [Your relevant skill/experience 1]
 • [Your relevant skill/experience 2]
 • [Your relevant skill/experience 3]
 
-I am particularly excited about this opportunity because [specific reason related to the company/role]. I am confident that my passion for [relevant field/technology] and my commitment to excellence make me an ideal candidate for this position.
+I am particularly drawn to this opportunity because [explain why you're interested in the company/position]. My experience in [relevant experience] has prepared me well for this role.
 
-I would welcome the opportunity to discuss how my skills and enthusiasm can contribute to your team's success. Thank you for considering my application.
+Thank you for considering my application. I look forward to the possibility of discussing how I can contribute to your team.
 
-Best regards,
+Sincerely,
 [Your Name]`;
   };
 
@@ -236,19 +236,23 @@ Best regards,
                     p: 3
                   }}
                 >
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                    <Avatar
-                      src={job.company?.logoUrl}
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                    <Avatar 
+                      src={typeof job.company === 'object' ? job.company?.logoUrl : undefined}
                       sx={{ width: 60, height: 60, mr: 2 }}
                     >
-                      {job.company?.companyName?.charAt(0) || 'C'}
+                      {typeof job.company === 'object' ? job.company?.companyName?.[0] : 
+                       typeof job.company === 'string' ? job.company?.[0] : 
+                       'C'}
                     </Avatar>
                     <Box>
-                      <Typography variant="h5" sx={{ fontWeight: 600, mb: 0.5 }}>
+                      <Typography variant="h6" gutterBottom>
                         {job.title}
                       </Typography>
-                      <Typography variant="h6" color="text.secondary">
-                        {job.company?.companyName || 'Company'}
+                      <Typography variant="body2" color="text.secondary">
+                        {typeof job.company === 'object' ? job.company?.companyName : 
+                         typeof job.company === 'string' ? job.company : 
+                         'Unknown Company'}
                       </Typography>
                     </Box>
                   </Box>
@@ -327,7 +331,7 @@ Best regards,
                 <Button
                   variant="outlined"
                   size="small"
-                  onClick={() => setCoverLetter(generateCoverLetterTemplate())}
+                  onClick={() => setCoverLetter(generateDefaultCoverLetter(job))}
                   startIcon={<Edit />}
                 >
                   Use Template
@@ -412,8 +416,8 @@ Best regards,
                   <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600 }}>
                     Position: {job.title}
                   </Typography>
-                  <Typography variant="body2" color="text.secondary" gutterBottom>
-                    {job.company?.companyName} • {job.location}
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    {t('application.applyingFor')} <strong>{job.title}</strong> {t('application.at')} <strong>{typeof job.company === 'object' ? job.company?.companyName : typeof job.company === 'string' ? job.company : 'Unknown Company'}</strong>
                   </Typography>
                 </CardContent>
               </Card>

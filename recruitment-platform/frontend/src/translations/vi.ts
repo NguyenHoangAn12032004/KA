@@ -1,0 +1,130 @@
+export default {
+  common: {
+    loading: 'Đang tải...',
+    error: 'Đã xảy ra lỗi',
+    success: 'Thành công',
+    save: 'Lưu',
+    cancel: 'Hủy',
+    edit: 'Chỉnh sửa',
+    delete: 'Xóa',
+    confirm: 'Xác nhận',
+    back: 'Quay lại',
+    next: 'Tiếp tục',
+    submit: 'Gửi',
+    search: 'Tìm kiếm',
+    filter: 'Lọc',
+    sort: 'Sắp xếp',
+    view: 'Xem',
+    download: 'Tải xuống',
+    print: 'In',
+    share: 'Chia sẻ',
+    close: 'Đóng',
+    clear: 'Xóa',
+    all: 'Tất cả',
+    more: 'Xem thêm',
+    less: 'Thu gọn'
+  },
+  auth: {
+    login: 'Đăng nhập',
+    register: 'Đăng ký',
+    logout: 'Đăng xuất',
+    email: 'Email',
+    password: 'Mật khẩu',
+    forgotPassword: 'Quên mật khẩu?',
+    loginSuccess: 'Đăng nhập thành công',
+    loginError: 'Đăng nhập thất bại',
+    registerSuccess: 'Đăng ký thành công',
+    registerError: 'Đăng ký thất bại'
+  },
+  job: {
+    list: 'Danh sách việc làm',
+    exploreOpportunities: 'Khám phá cơ hội việc làm',
+    findYourDream: 'Tìm kiếm công việc mơ ước của bạn',
+    searchPlaceholder: 'Tìm kiếm theo chức danh, công ty hoặc kỹ năng...',
+    filters: 'Bộ lọc',
+    type: 'Loại công việc',
+    workMode: 'Hình thức làm việc',
+    experienceLevel: 'Kinh nghiệm',
+    location: 'Địa điểm',
+    salaryRange: 'Mức lương',
+    allSalaries: 'Tất cả mức lương',
+    clearFilters: 'Xóa bộ lọc',
+    applyFilters: 'Áp dụng',
+    noMatch: 'Không tìm thấy công việc phù hợp',
+    adjustFilters: 'Vui lòng điều chỉnh bộ lọc hoặc thử tìm kiếm khác',
+    newJobAlert: 'Có công việc mới được đăng tải',
+    newJobsAlert: 'Có {{count}} công việc mới được đăng tải',
+    refresh: 'Làm mới',
+    views: 'Lượt xem',
+    applicants: 'Ứng viên',
+    matchScore: 'Độ phù hợp',
+    applied: 'Đã ứng tuyển',
+    apply: 'Ứng tuyển',
+    saved: 'Đã lưu công việc',
+    unsaved: 'Đã bỏ lưu công việc',
+    negotiable: 'Thương lượng',
+    noTitle: 'Không có tiêu đề',
+    unknownCompany: 'Công ty không xác định',
+    noDescription: 'Không có mô tả',
+    postedOn: 'Đăng ngày {{date}}',
+    applications: '{{count}} ứng viên',
+    save: 'Lưu',
+    types: {
+      full_time: 'Toàn thời gian',
+      part_time: 'Bán thời gian',
+      internship: 'Thực tập',
+      contract: 'Hợp đồng'
+    },
+    workModes: {
+      onsite: 'Tại văn phòng',
+      remote: 'Từ xa',
+      hybrid: 'Kết hợp'
+    },
+    experienceLevels: {
+      entry: 'Mới tốt nghiệp',
+      junior: 'Sơ cấp',
+      intermediate: 'Trung cấp',
+      senior: 'Cao cấp'
+    },
+    sort: {
+      newest: 'Mới nhất',
+      salaryHigh: 'Lương cao nhất',
+      salaryLow: 'Lương thấp nhất',
+      relevance: 'Phù hợp nhất'
+    }
+  },
+  jobs: {
+    postedOn: 'Đăng ngày {{date}}',
+    applications: '{{count}} ứng viên',
+    apply: 'Ứng tuyển',
+    applied: 'Đã ứng tuyển',
+    save: 'Lưu',
+    saved: 'Đã lưu'
+  },
+  application: {
+    submitSuccess: 'Nộp đơn ứng tuyển thành công',
+    submitError: 'Có lỗi xảy ra khi nộp đơn',
+    review: 'Xem lại đơn',
+    coverLetter: 'Thư xin việc',
+    additionalFiles: 'Tài liệu bổ sung',
+    preview: 'Xem trước',
+    submit: 'Nộp đơn',
+    submitting: 'Đang nộp đơn...',
+    status: {
+      pending: 'Chờ xét duyệt',
+      reviewing: 'Đang xem xét',
+      shortlisted: 'Vào vòng trong',
+      interview: 'Phỏng vấn',
+      offer: 'Nhận offer',
+      rejected: 'Từ chối',
+      withdrawn: 'Đã rút'
+    }
+  },
+  error: {
+    general: 'Đã xảy ra lỗi. Vui lòng thử lại sau.',
+    loadJobs: 'Không thể tải danh sách công việc',
+    fetchJobs: 'Không thể tải danh sách công việc',
+    submitApplication: 'Không thể nộp đơn ứng tuyển',
+    loginRequired: 'Vui lòng đăng nhập để thực hiện chức năng này'
+  }
+}; 

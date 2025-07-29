@@ -176,6 +176,8 @@ model User {
   activityLogs      ActivityLog[]
   companyReviews    CompanyReview[]
   referredApplications Application[] @relation("ApplicationReferrer")
+  savedJobs         SavedJob[]
+  jobViews          JobView[]
 
   @@map("users")
 }
@@ -433,8 +435,22 @@ model Job {
   // Relationships
   applications      Application[]
   interviews        Interview[]
+  savedJobs         SavedJob[]
+  jobViews          JobView[]
 
   @@map("jobs")
+}
+
+model JobView {
+  id        String   @id @default(uuid())
+  jobId     String
+  userId    String?
+  ipAddress String?
+  userAgent String?
+  viewedAt  DateTime @default(now())
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@map("job_views")
 }
 
 model Application {
@@ -775,4 +791,17 @@ model Analytics {
   @@unique([metric, date, userId, jobId, companyId])
   @@index([metric, date])
   @@map("analytics")
+}
+
+model SavedJob {
+  id         String   @id @default(uuid())
+  studentId  String
+  jobId      String
+  savedAt    DateTime @default(now())
+
+  student    User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  job        Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, jobId])
+  @@map("saved_jobs")
 }

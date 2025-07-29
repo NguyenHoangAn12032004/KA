@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Company Dashboard</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #f5f5f5;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+    .container {
+      background-color: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      max-width: 600px;
+      width: 100%;
+    }
+    h1 {
+      color: #3f51b5;
+      margin-top: 0;
+    }
+    button {
+      background-color: #3f51b5;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+      margin-top: 20px;
+    }
+    button:hover {
+      background-color: #303f9f;
+    }
+    .token-container {
+      background-color: #f5f5f5;
+      padding: 15px;
+      border-radius: 5px;
+      margin: 20px 0;
+      word-break: break-all;
+    }
+    .status {
+      margin-top: 20px;
+      padding: 10px;
+      border-radius: 5px;
+    }
+    .success {
+      background-color: #e8f5e9;
+      color: #2e7d32;
+    }
+    .error {
+      background-color: #ffebee;
+      color: #c62828;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Test Company Dashboard</h1>
+    <p>Click the button below to set the company token and redirect to the company dashboard page.</p>
+    
+    <div class="token-container">
+      <strong>Token:</strong>
+      <div id="token">eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImE2NGEwNWU2LTVkYzItNGMyZi05NWU0LTJiOTE3MzNmMmM4NCIsImVtYWlsIjoiY29tcGFueUBkZW1vLmNvbSIsInJvbGUiOiJDT01QQU5ZIiwiaWF0IjoxNzUzMTY4MDMxLCJleHAiOjE3NTMyNTQ0MzF9.2O0VE76Q7D5e378M3IMB7fnqhVTKRjUXyb7qeytJc0M</div>
+    </div>
+    
+    <div id="status"></div>
+    
+    <button id="setTokenBtn">Set Token & Go to Dashboard</button>
+  </div>
+
+  <script>
+    document.getElementById('setTokenBtn').addEventListener('click', function() {
+      const token = document.getElementById('token').textContent;
+      const statusDiv = document.getElementById('status');
+      
+      try {
+        // Set the token in localStorage
+        localStorage.setItem('token', token);
+        
+        // Show success message
+        statusDiv.className = 'status success';
+        statusDiv.textContent = 'Token set successfully! Redirecting to company dashboard...';
+        
+        // Redirect to company dashboard after a short delay
+        setTimeout(() => {
+          window.location.href = 'http://localhost:3000/company-dashboard';
+        }, 1500);
+      } catch (error) {
+        // Show error message if something goes wrong
+        statusDiv.className = 'status error';
+        statusDiv.textContent = 'Error setting token: ' + error.message;
+      }
+    });
+  </script>
+</body>
+</html> 

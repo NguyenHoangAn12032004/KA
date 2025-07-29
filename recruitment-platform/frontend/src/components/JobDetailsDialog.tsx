@@ -85,24 +85,16 @@ interface Job {
     founded?: string;
     description?: string;
     rating?: number;
-  };
-  company_profiles?: {
-    companyName: string;
-    logo?: string;
-    description?: string;
-    website?: string;
-    city?: string;
-    industry?: string;
-    companySize?: string;
-  };
+  } | string;
+  companyLogo?: string;
   location: string;
   salary?: string;
   salaryMin?: number;
   salaryMax?: number;
   currency?: string;
-  type: 'FULL_TIME' | 'PART_TIME' | 'INTERNSHIP' | 'CONTRACT';
-  workMode?: 'ONSITE' | 'REMOTE' | 'HYBRID';
-  experienceLevel?: 'ENTRY' | 'JUNIOR' | 'INTERMEDIATE' | 'SENIOR';
+  type: 'FULL_TIME' | 'PART_TIME' | 'INTERNSHIP' | 'CONTRACT' | string;
+  workMode?: 'ONSITE' | 'REMOTE' | 'HYBRID' | string;
+  experienceLevel?: 'ENTRY' | 'JUNIOR' | 'INTERMEDIATE' | 'SENIOR' | string;
   description?: string;
   requirements?: string[];
   benefits?: string[];
@@ -113,18 +105,30 @@ interface Job {
   isActive?: boolean;
   publishedAt?: string;
   applicationsCount?: number;
+  applicationCount?: number;
   isSaved?: boolean;
   hasApplied?: boolean;
   viewsCount?: number;
+  viewCount?: number;
   department?: string;
   reportingTo?: string;
+  createdAt?: string;
+  company_profiles?: {
+    companyName: string;
+    logo?: string;
+    description?: string;
+    website?: string;
+    city?: string;
+    industry?: string;
+    companySize?: string;
+  };
 }
 
 interface JobDetailsDialogProps {
   open: boolean;
   job: Job | null;
   onClose: () => void;
-  onApply: (job: Job) => void;
+  onApply: (job: any) => void;
   onSave?: (jobId: string) => void;
   onShare?: (job: Job) => void;
 }
@@ -275,7 +279,7 @@ const JobDetailsDialog: React.FC<JobDetailsDialogProps> = ({
           <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', flex: 1 }}>
               <Avatar
-                src={job.company?.logoUrl}
+                src={typeof job.company === 'object' ? job.company?.logoUrl : job.companyLogo || job.company_profiles?.logo}
                 sx={{ 
                   width: 80, 
                   height: 80, 
@@ -284,7 +288,9 @@ const JobDetailsDialog: React.FC<JobDetailsDialogProps> = ({
                   boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
                 }}
               >
-                {job.company?.companyName?.charAt(0) || 'C'}
+                {typeof job.company === 'object' ? job.company?.companyName?.[0] : 
+                 typeof job.company === 'string' ? job.company?.[0] : 
+                 job.company_profiles?.companyName?.[0] || 'C'}
               </Avatar>
               
               <Box sx={{ flex: 1 }}>
@@ -292,7 +298,9 @@ const JobDetailsDialog: React.FC<JobDetailsDialogProps> = ({
                   {job.title}
                 </Typography>
                 <Typography variant="h6" sx={{ opacity: 0.9, mb: 1 }}>
-                  {job.company?.companyName || 'Company'}
+                  {typeof job.company === 'object' ? job.company?.companyName : 
+                   typeof job.company === 'string' ? job.company : 
+                   job.company_profiles?.companyName || 'Company'}
                 </Typography>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -311,6 +319,33 @@ const JobDetailsDialog: React.FC<JobDetailsDialogProps> = ({
                       {job.applicationsCount || 0} applicants
                     </Typography>
                   </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <TrendingUp sx={{ fontSize: 18 }} />
+                    <Typography variant="body2">
+                      {job.viewCount || job.viewsCount || 0} views
+                    </Typography>
+                  </Box>
+                  {typeof job.company === 'object' && job.company?.rating && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Rating
+                        value={typeof job.company === 'object' ? job.company.rating : 0}
+                        readOnly
+                        size="small"
+                        sx={{
+                          "& .MuiRating-iconFilled": {
+                            color: "warning.main",
+                          },
+                        }}
+                      />
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        fontWeight={600}
+                      >
+                        {typeof job.company === 'object' ? job.company.rating : 0}/5
+                      </Typography>
+                    </Box>
+                  )}
                 </Box>
               </Box>
             </Box>
@@ -506,7 +541,7 @@ const JobDetailsDialog: React.FC<JobDetailsDialogProps> = ({
                     </Typography>
                   </Box>
                   <Typography variant="body1" fontWeight={600}>
-                    {job.viewsCount || 0} views
+                    {job.viewCount || job.viewsCount || 0} views
                   </Typography>
                 </Card>
 

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Company Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #3f51b5;
+        }
+        button {
+            background-color: #3f51b5;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 0;
+        }
+        button:hover {
+            background-color: #303f9f;
+        }
+        .token-container {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+            word-break: break-all;
+        }
+        .success {
+            color: #4caf50;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test Company Dashboard</h1>
+    <p>Sử dụng trang này để thiết lập token và chuyển hướng đến trang dashboard.</p>
+    
+    <h2>Token hiện tại</h2>
+    <div class="token-container">
+        <pre id="current-token">Chưa có token</pre>
+    </div>
+    
+    <h2>Thiết lập token mới</h2>
+    <div class="token-container">
+        <pre>eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjhjYWM4NmI3LTRiMmItNDA2Yi1hZjM0LTQxNTkyOGZlODdhZCIsImVtYWlsIjoiY29tcGFueUBleGFtcGxlLmNvbSIsInJvbGUiOiJDT01QQU5ZIiwiaWF0IjoxNzUzMTgzMTI5LCJleHAiOjE3NTMxODY3Mjl9.zQrMlq7jxPhYlKkXzBRFoDUeEVUIbhzzkoz_Mj9QToM</pre>
+    </div>
+    
+    <button id="set-token">Thiết lập token và chuyển hướng</button>
+    <button id="clear-token">Xóa token</button>
+    
+    <div id="status"></div>
+    
+    <script>
+        // Hiển thị token hiện tại
+        const currentToken = localStorage.getItem('token');
+        document.getElementById('current-token').textContent = currentToken || 'Chưa có token';
+        
+        // Thiết lập token mới và chuyển hướng
+        document.getElementById('set-token').addEventListener('click', function() {
+            const token = document.querySelector('.token-container pre:nth-child(1)').textContent.trim();
+            localStorage.setItem('token', token);
+            document.getElementById('status').innerHTML = '<p class="success">Token đã được thiết lập!</p>';
+            
+            // Chuyển hướng sau 1 giây
+            setTimeout(() => {
+                window.location.href = 'http://localhost:3000/company-dashboard';
+            }, 1000);
+        });
+        
+        // Xóa token
+        document.getElementById('clear-token').addEventListener('click', function() {
+            localStorage.removeItem('token');
+            document.getElementById('current-token').textContent = 'Chưa có token';
+            document.getElementById('status').innerHTML = '<p class="success">Token đã được xóa!</p>';
+        });
+    </script>
+</body>
+</html> 

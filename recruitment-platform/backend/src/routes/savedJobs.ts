@@ -6,10 +6,18 @@ import { authenticateToken } from '../middleware/auth';
 const router = Router();
 const prisma = new PrismaClient();
 
+interface AuthRequest extends Request {
+  user?: {
+    id: string;
+    email: string;
+    role: string;
+  };
+}
+
 // Get saved jobs for authenticated user
 router.get('/', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user?.id;
+    const userId = (req as AuthRequest).user?.id;
     
     console.log('🔍 Getting saved jobs for user:', userId);
     
@@ -52,7 +60,7 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
 router.post('/', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { jobId } = req.body;
-    const userId = (req as any).user?.id;
+    const userId = (req as AuthRequest).user?.id;
     
     console.log('💾 Saving job:', { jobId, userId });
     
@@ -111,7 +119,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
 router.delete('/:jobId', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { jobId } = req.params;
-    const userId = (req as any).user?.id;
+    const userId = (req as AuthRequest).user?.id;
     
     console.log('🗑️ Removing saved job:', { jobId, userId });
     
@@ -143,7 +151,7 @@ router.delete('/:jobId', authenticateToken, async (req: Request, res: Response) 
 router.get('/check/:jobId', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { jobId } = req.params;
-    const userId = (req as any).user?.id;
+    const userId = (req as AuthRequest).user?.id;
     
     console.log('🔍 Checking if job is saved:', { jobId, userId });
     
@@ -151,7 +159,7 @@ router.get('/check/:jobId', authenticateToken, async (req: Request, res: Respons
       return res.status(401).json({ error: 'User authentication required' });
     }
     
-    const savedJob = await (prisma as any).savedJob.findUnique({
+    const savedJob = await prisma.savedJob.findUnique({
       where: {
         userId_jobId: {
           userId: userId,  // Use authenticated user ID

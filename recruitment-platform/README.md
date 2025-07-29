@@ -326,3 +326,38 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 **📞 Support**: Nếu có vấn đề, vui lòng tạo issue trên GitHub hoặc liên hệ qua email.
 
 **⭐ Star this project** nếu nó hữu ích cho bạn!
+
+## 🔄 Đồng bộ dữ liệu Company Dashboard
+
+Hệ thống đã được cập nhật để đồng bộ và sử dụng dữ liệu thực cho trang dashboard công ty, bao gồm:
+
+- **Đồng bộ dữ liệu công việc**: Đảm bảo các công việc được liên kết đúng với công ty
+- **Hiển thị ứng viên thực**: Hiển thị ứng viên đã ứng tuyển vào các công việc
+- **Thống kê chính xác**: Tính toán thống kê dựa trên dữ liệu thực từ database
+
+### Chạy ứng dụng
+
+```bash
+# Chạy cả backend và frontend
+start-all.bat
+
+# Hoặc chạy riêng từng phần
+start-backend.bat
+start-frontend.bat
+```
+
+### Tài khoản demo
+
+- **Công ty**:
+  - Email: `company@example.com`
+  - Password: `password123`
+
+- **Sinh viên**:
+  - Email: `student@demo.com`
+  - Password: `password123`
+
+- **Admin**:
+  - Email: `admin@recruitment.com`
+  - Password: `admin123`
+
+Xem thêm chi tiết tại [COMPANY-DASHBOARD-SYNC.md](./COMPANY-DASHBOARD-SYNC.md)

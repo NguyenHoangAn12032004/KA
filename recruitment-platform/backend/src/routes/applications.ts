@@ -1,24 +1,268 @@
-import { Router } from 'express';
+import express, { Request } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { Request, Response } from 'express';
-import { authenticateToken } from '../middleware/auth';
+import { getApplications, updateApplication } from '../controllers/applications';
+import { authenticateToken, requireRole } from '../middleware/auth';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 
-const router = Router();
+const router = express.Router();
 const prisma = new PrismaClient();
 
-// Get all applications for authenticated user
-router.get('/', authenticateToken, async (req: Request, res: Response) => {
-  try {
-    const userId = (req as any).user?.id;
-    console.log('📋 Getting applications for user:', userId);
+// Set up multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../../uploads/resumes');
+    
+    // Create directory if it doesn't exist
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, 'resume-' + uniqueSuffix + ext);
+  }
+});
 
+const upload = multer({ 
+  storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ];
+    
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only PDF and Word documents are allowed.') as any);
+    }
+  }
+});
+
+interface AuthRequest extends Request {
+  user?: {
+    id: string;
+    email: string;
+    role: string;
+    companyId?: string;
+  };
+}
+
+router.get('/', authenticateToken, requireRole(['COMPANY', 'HR_MANAGER']), getApplications);
+router.patch('/:id', authenticateToken, requireRole(['COMPANY', 'HR_MANAGER']), updateApplication);
+
+// Upload resume for application
+router.post('/:jobId/resume', authenticateToken, upload.single('resume'), async (req: AuthRequest, res) => {
+  try {
+    const { jobId } = req.params;
+    const userId = req.user?.id;
+    
     if (!userId) {
-      return res.status(401).json({ error: 'User authentication required' });
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required'
+      });
     }
 
+    // Check if job exists
+    const job = await prisma.job.findUnique({
+      where: { id: jobId }
+    });
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        error: 'Job not found'
+      });
+    }
+
+    // Check if file was uploaded
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: 'No file uploaded'
+      });
+    }
+
+    // Generate the URL for the uploaded file
+    const fileUrl = `/uploads/resumes/${req.file.filename}`;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        url: fileUrl,
+        filename: req.file.filename,
+        originalname: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size
+      }
+    });
+  } catch (error) {
+    console.error('Error uploading resume:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to upload resume'
+    });
+  }
+});
+
+// Route for students to submit job applications
+router.post('/', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required'
+      });
+    }
+
+    // Check if the user is a student
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user || user.role !== 'STUDENT') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only students can apply for jobs'
+      });
+    }
+
+    const { jobId, coverLetter, customResume } = req.body;
+
+    // Check if job exists
+    const job = await prisma.job.findUnique({
+      where: { id: jobId }
+    });
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        error: 'Job not found'
+      });
+    }
+
+    // Check if the student has already applied for this job
+    const existingApplication = await prisma.application.findUnique({
+      where: {
+        jobId_studentId: {
+          jobId,
+          studentId: userId
+        }
+      }
+    });
+
+    if (existingApplication) {
+      return res.status(409).json({
+        success: false,
+        error: 'You have already applied for this job'
+      });
+    }
+
+    // Tạo transaction để đảm bảo tính nhất quán dữ liệu
+    const [application, updatedJob] = await prisma.$transaction([
+      // Tạo đơn ứng tuyển
+      prisma.application.create({
+        data: {
+          jobId,
+          studentId: userId,
+          coverLetter,
+          customResume,
+          status: 'PENDING',
+          statusHistory: JSON.stringify([
+            {
+              status: 'PENDING',
+              timestamp: new Date().toISOString(),
+              note: 'Application submitted'
+            }
+          ])
+        },
+        include: {
+          job: true
+        }
+      }),
+      
+      // Cập nhật số lượng ứng viên cho công việc
+      prisma.job.update({
+        where: { id: jobId },
+        data: {
+          applicationsCount: {
+            increment: 1
+          }
+        }
+      })
+    ]);
+
+    // Create notification for the student
+    await prisma.notification.create({
+      data: {
+        userId,
+        type: 'APPLICATION_SUBMITTED',
+        title: 'Application Submitted',
+        message: `Your application for ${job.title} has been submitted successfully`,
+        data: {
+          applicationId: application.id,
+          jobId
+        }
+      }
+    });
+
+    // Get the Socket.IO instance
+    const io = req.app.get('io');
+    if (io) {
+      // Notify the company about the new application
+      io.to(`company:${job.companyId}`).emit('new-application', {
+        applicationId: application.id,
+        jobId,
+        jobTitle: job.title
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      data: {
+        application_id: application.id,
+        status: application.status,
+        submitted_at: application.appliedAt,
+        message: 'Application submitted successfully'
+      }
+    });
+  } catch (error) {
+    console.error('Error submitting application:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to submit application'
+    });
+  }
+});
+
+// Route for students to get their applications
+router.get('/student', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required'
+      });
+    }
+
+    // Get all applications for this student
     const applications = await prisma.application.findMany({
       where: {
-        studentId: userId  // Filter by authenticated user ID
+        studentId: userId
       },
       include: {
         job: {
@@ -32,216 +276,82 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
       }
     });
 
-    console.log('📋 Found applications for user:', applications.length);
+    res.json({
+      success: true,
+      data: applications
+    });
+  } catch (error) {
+    console.error('Error fetching student applications:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch applications'
+    });
+  }
+});
 
-    // Transform data to match frontend interface
-    const transformedApplications = applications.map(app => ({
+// Lấy các đơn ứng tuyển gần đây cho công ty
+router.get('/company/recent', authenticateToken, requireRole(['COMPANY', 'HR_MANAGER']), async (req: AuthRequest, res) => {
+  try {
+    const companyId = req.user?.companyId;
+    
+    if (!companyId) {
+      return res.status(403).json({
+        success: false,
+        error: 'Company ID not found'
+      });
+    }
+
+    // Lấy tất cả job của công ty
+    const companyJobs = await prisma.job.findMany({
+      where: { companyId: companyId },
+      select: { id: true }
+    });
+    
+    const jobIds = companyJobs.map(job => job.id);
+    
+    // Lấy 10 đơn ứng tuyển gần đây nhất
+    const recentApplications = await prisma.application.findMany({
+      where: {
+        jobId: { in: jobIds }
+      },
+      include: {
+        student: {
+          include: {
+            studentProfile: true
+          }
+        },
+        job: true
+      },
+      orderBy: {
+        appliedAt: 'desc'
+      },
+      take: 10
+    });
+
+    // Chuyển đổi dữ liệu
+    const transformedApplications = recentApplications.map(app => ({
       id: app.id,
       jobId: app.jobId,
       jobTitle: app.job.title,
-      companyName: app.job.company_profiles.companyName,
+      studentId: app.studentId,
+      studentName: app.student.studentProfile ? `${app.student.studentProfile.firstName} ${app.student.studentProfile.lastName}` : 'Unknown',
+      studentAvatar: app.student.studentProfile?.avatar,
       status: app.status,
-      appliedAt: app.appliedAt.toISOString(),
-      updatedAt: app.updatedAt.toISOString(),
-      coverLetter: app.coverLetter,
-      hrNotes: app.hrNotes,
-      rating: app.rating
+      appliedAt: app.appliedAt,
+      university: app.student.studentProfile?.university,
+      major: app.student.studentProfile?.major
     }));
 
-    res.json(transformedApplications);
+    res.json({
+      success: true,
+      data: transformedApplications
+    });
   } catch (error) {
-    console.error('❌ Error getting applications:', error);
-    res.status(500).json({ error: 'Failed to get applications' });
-  }
-});
-
-// Create new application 
-router.post('/', authenticateToken, async (req: Request, res: Response) => {
-  try {
-    const { jobId, coverLetter } = req.body;
-    const userId = (req as any).user?.id;
-    
-    console.log('📤 Received application request:', { jobId, userId, coverLetter: coverLetter?.substring(0, 50) });
-    
-    if (!jobId) {
-      return res.status(400).json({ error: 'Job ID is required' });
-    }
-
-    if (!userId) {
-      return res.status(401).json({ error: 'User authentication required' });
-    }
-
-    // First, check if the job exists
-    console.log('🔍 Checking if job exists:', jobId);
-    const job = await prisma.job.findUnique({
-      where: { id: jobId },
-      include: {
-        company_profiles: true
-      }
+    console.error('Error fetching recent applications:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch recent applications'
     });
-
-    if (!job) {
-      console.log('❌ Job not found:', jobId);
-      return res.status(404).json({ error: 'Job not found' });
-    }
-
-    console.log('✅ Job found:', job.title);
-
-    // Check if this user already applied for this job
-    console.log('🔍 Checking for existing application...');
-    const existingApplication = await prisma.application.findFirst({
-      where: {
-        jobId,
-        studentId: userId  // Use actual user ID
-      }
-    });
-
-    if (existingApplication) {
-      console.log('❌ User already applied for this job');
-      return res.status(409).json({ error: 'You have already applied for this job' });
-    }
-
-    // Create the application
-    console.log('📝 Creating new application...');
-    const application = await prisma.application.create({
-      data: {
-        jobId,
-        studentId: userId,  // Use actual user ID instead of hardcoded
-        coverLetter: coverLetter || '',
-        status: 'PENDING'
-      }
-    });
-
-    console.log('✅ Application created:', application.id);
-
-    // Transform response
-    const response = {
-      id: application.id,
-      jobId: application.jobId,
-      jobTitle: job.title,
-      companyName: job.company_profiles.companyName,
-      status: application.status,
-      appliedAt: application.appliedAt.toISOString(),
-      coverLetter: application.coverLetter
-    };
-
-    res.status(201).json(response);
-  } catch (error) {
-    console.error('❌ Detailed error creating application:', error);
-    console.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack');
-    console.error('❌ Error name:', error instanceof Error ? error.name : 'Unknown');
-    console.error('❌ Error message:', error instanceof Error ? error.message : String(error));
-    res.status(500).json({ error: 'Failed to create application', details: error instanceof Error ? error.message : String(error) });
-  }
-});
-
-// Create current user from token if not exists
-router.post('/setup-current-user', authenticateToken, async (req: Request, res: Response) => {
-  try {
-    const userId = (req as any).user?.id;
-    
-    console.log('🧪 Setting up current user from token:', userId);
-    
-    if (!userId) {
-      return res.status(401).json({ error: 'User authentication required' });
-    }
-    
-    // Check if user exists
-    const existingUser = await prisma.user.findUnique({
-      where: { id: userId }
-    });
-    
-    if (!existingUser) {
-      // Create user with ID from token
-      const newUser = await prisma.user.create({
-        data: {
-          id: userId,
-          email: 'current@student.com', // Temporary email
-          password: 'temp123',
-          role: 'STUDENT',
-          isActive: true,
-          isVerified: true
-        }
-      });
-      console.log('✅ Current user created:', newUser.id);
-      
-      // Also create student profile
-      const studentProfile = await prisma.studentProfile.create({
-        data: {
-          userId: userId,
-          firstName: 'Current',
-          lastName: 'Student',
-          phone: '0123456789',
-          dateOfBirth: new Date('1995-01-01'),
-          university: 'Test University',
-          major: 'Computer Science',
-          gpa: 3.5,
-          graduationYear: 2020
-        }
-      });
-      console.log('✅ Student profile created:', studentProfile.id);
-      
-      res.json({ success: true, message: 'Current user and profile created', userId: userId });
-    } else {
-      console.log('✅ Current user already exists');
-      res.json({ success: true, message: 'Current user already exists', userId: userId });
-    }
-  } catch (error) {
-    console.error('❌ Error setting up current user:', error);
-    res.status(500).json({ error: String(error) });
-  }
-});
-
-// Quick fix: Create current user - GET version for easy testing
-router.get('/fix-user', authenticateToken, async (req: Request, res: Response) => {
-  try {
-    const userId = (req as any).user?.id;
-    
-    console.log('🔧 Quick fix: Creating user from token:', userId);
-    
-    if (!userId) {
-      return res.status(401).json({ error: 'User authentication required' });
-    }
-    
-    // Check if user exists
-    const existingUser = await prisma.user.findUnique({
-      where: { id: userId }
-    });
-    
-    if (!existingUser) {
-      // Create user with ID from token
-      const newUser = await prisma.user.create({
-        data: {
-          id: userId,
-          email: `user-${userId.slice(0,8)}@student.com`,
-          password: 'temp123',
-          role: 'STUDENT',
-          isActive: true,
-          isVerified: true
-        }
-      });
-      console.log('✅ User created:', newUser.id);
-      
-      // Also create student profile
-      const studentProfile = await prisma.studentProfile.create({
-        data: {
-          userId: userId,
-          firstName: 'Student',
-          lastName: 'User',
-          university: 'Test University',
-          major: 'Computer Science',
-          graduationYear: 2020
-        }
-      });
-      console.log('✅ Student profile created');
-      
-      res.json({ success: true, message: 'User and profile created successfully', userId: userId });
-    } else {
-      res.json({ success: true, message: 'User already exists', userId: userId });
-    }
-  } catch (error) {
-    console.error('❌ Error creating user:', error);
-    res.status(500).json({ error: String(error) });
   }
 });
 

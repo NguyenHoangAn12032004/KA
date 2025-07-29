@@ -1,201 +1,107 @@
-import { Router } from 'express';
-import { prisma } from '../utils/database';
+import express, { Request } from 'express';
+import { PrismaClient } from '@prisma/client';
+import { authenticateToken, requireRole } from '../middleware/auth';
 
-const router = Router();
+const router = express.Router();
+const prisma = new PrismaClient();
 
-// Get dashboard statistics
-router.get('/dashboard-stats', async (req, res) => {
+interface AuthRequest extends Request {
+  user?: {
+    id: string;
+    email: string;
+    role: string;
+    companyId?: string;
+  };
+}
+
+// Lấy thông tin hiệu suất cho công ty
+router.get('/company/performance', authenticateToken, requireRole(['COMPANY', 'HR_MANAGER']), async (req: AuthRequest, res) => {
   try {
-    // Get total counts
-    const [totalUsers, totalCompanies, totalJobs, totalApplications] = await Promise.all([
-      prisma.user.count(),
-      prisma.company_profiles.count(),
-      prisma.job.count(),
-      prisma.application.count()
-    ]);
+    const companyId = req.user?.companyId;
+    
+    if (!companyId) {
+      return res.status(403).json({
+        success: false,
+        error: 'Company ID not found'
+      });
+    }
 
-    // Get user counts by role
-    const [studentCount, companyCount, adminCount] = await Promise.all([
-      prisma.user.count({ where: { role: 'STUDENT' } }),
-      prisma.user.count({ where: { role: 'COMPANY' } }),
-      prisma.user.count({ where: { role: 'ADMIN' } })
-    ]);
-
-    // Get active jobs count
-    const activeJobs = await prisma.job.count({
-      where: {
-        isActive: true
+    // Lấy tất cả job của công ty
+    const jobs = await prisma.job.findMany({
+      where: { companyId: companyId },
+      include: {
+        applications: {
+          include: {
+            interviews: true
+          }
+        }
       }
     });
 
-    // Get pending applications count
-    const pendingApplications = await prisma.application.count({
-      where: {
-        status: 'PENDING'
-      }
-    });
+    // Tính toán các chỉ số
+    const totalJobs = jobs.length;
+    const totalApplications = jobs.reduce((sum, job) => sum + job.applications.length, 0);
+    const totalInterviews = jobs.reduce((sum, job) => {
+      return sum + job.applications.reduce((iSum, app) => iSum + app.interviews.length, 0);
+    }, 0);
+    const totalHired = jobs.reduce((sum, job) => {
+      return sum + job.applications.filter(app => app.status === 'ACCEPTED').length;
+    }, 0);
+    const totalViews = jobs.reduce((sum, job) => sum + job.viewCount, 0);
 
-    // Calculate growth rates (comparing last 30 days vs previous 30 days)
+    // Tính tỷ lệ
+    const applicationRate = totalJobs > 0 ? totalApplications / totalJobs : 0;
+    const interviewRate = totalApplications > 0 ? totalInterviews / totalApplications : 0;
+    const hireRate = totalInterviews > 0 ? totalHired / totalInterviews : 0;
+
+    // Lấy dữ liệu phân tích theo thời gian (30 ngày gần đây)
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
-    const sixtyDaysAgo = new Date();
-    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
 
-    // Weekly activity tracking (last 7 days)
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-    const [newRegistrations, newJobs, newApplications] = await Promise.all([
-      prisma.user.count({
-        where: {
-          createdAt: {
-            gte: sevenDaysAgo
-          }
-        }
-      }),
-      prisma.job.count({
-        where: {
-          createdAt: {
-            gte: sevenDaysAgo
-          }
-        }
-      }),
-      prisma.application.count({
-        where: {
-          createdAt: {
-            gte: sevenDaysAgo
-          }
-        }
-      })
-    ]);
-
-    // Count blocked accounts (suspended users)
-    const blockedAccounts = await prisma.user.count({
+    const dailyMetrics = await prisma.analytics.findMany({
       where: {
-        // Assuming you have a status field, otherwise return 0
-        // status: 'SUSPENDED'
+        companyId: companyId,
+        date: {
+          gte: thirtyDaysAgo
+        }
+      },
+      orderBy: {
+        date: 'asc'
       }
     });
 
-    const [usersLast30Days, usersPrevious30Days] = await Promise.all([
-      prisma.user.count({
-        where: {
-          createdAt: {
-            gte: thirtyDaysAgo
-          }
-        }
-      }),
-      prisma.user.count({
-        where: {
-          createdAt: {
-            gte: sixtyDaysAgo,
-            lt: thirtyDaysAgo
-          }
-        }
-      })
-    ]);
-
-    const [jobsLast30Days, jobsPrevious30Days] = await Promise.all([
-      prisma.job.count({
-        where: {
-          createdAt: {
-            gte: thirtyDaysAgo
-          }
-        }
-      }),
-      prisma.job.count({
-        where: {
-          createdAt: {
-            gte: sixtyDaysAgo,
-            lt: thirtyDaysAgo
-          }
-        }
-      })
-    ]);
-
-    // Calculate growth percentages
-    const usersGrowth = usersPrevious30Days > 0 
-      ? ((usersLast30Days - usersPrevious30Days) / usersPrevious30Days) * 100 
-      : usersLast30Days > 0 ? 100 : 0;
-
-    const jobsGrowth = jobsPrevious30Days > 0 
-      ? ((jobsLast30Days - jobsPrevious30Days) / jobsPrevious30Days) * 100 
-      : jobsLast30Days > 0 ? 100 : 0;
+    // Nhóm dữ liệu theo ngày và loại
+    const metricsByDate = dailyMetrics.reduce((acc, metric) => {
+      const dateStr = metric.date.toISOString().split('T')[0];
+      if (!acc[dateStr]) {
+        acc[dateStr] = {};
+      }
+      if (!acc[dateStr][metric.metric]) {
+        acc[dateStr][metric.metric] = 0;
+      }
+      acc[dateStr][metric.metric] += metric.value;
+      return acc;
+    }, {});
 
     res.json({
       success: true,
       data: {
-        totalUsers,
-        totalCompanies,
         totalJobs,
         totalApplications,
-        activeJobs,
-        pendingApplications,
-        usersGrowth: Math.round(usersGrowth * 10) / 10, // Round to 1 decimal
-        jobsGrowth: Math.round(jobsGrowth * 10) / 10,
-        // User breakdown
-        studentCount,
-        companyCount,
-        adminCount,
-        // Weekly activities
-        weeklyStats: {
-          newRegistrations,
-          newJobs,
-          newApplications,
-          blockedAccounts: 0 // Default to 0 since we don't have status field yet
-        }
+        totalInterviews,
+        totalHired,
+        totalViews,
+        applicationRate,
+        interviewRate,
+        hireRate,
+        metrics: metricsByDate
       }
     });
-
   } catch (error) {
-    console.error('Error fetching dashboard stats:', error);
+    console.error('Error fetching company performance:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error'
-    });
-  }
-});
-
-// Get recent activities
-router.get('/recent-activities', async (req, res) => {
-  try {
-    const recentUsers = await prisma.user.findMany({
-      take: 10,
-      orderBy: {
-        createdAt: 'desc'
-      },
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        isActive: true,
-        createdAt: true,
-        lastLogin: true,
-        studentProfile: {
-          select: {
-            firstName: true,
-            lastName: true
-          }
-        },
-        company_profiles: {
-          select: {
-            companyName: true
-          }
-        }
-      }
-    });
-
-    res.json({
-      success: true,
-      data: recentUsers
-    });
-
-  } catch (error) {
-    console.error('Error fetching recent activities:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
+      error: 'Failed to fetch company performance'
     });
   }
 });

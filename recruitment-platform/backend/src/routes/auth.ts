@@ -80,17 +80,16 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
 router.post('/login', async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body;
+    
+    console.log('🔍 Login attempt for email:', email);
 
-    // Find user with profiles
+    // Find user (no include) for password check and update
     const user = await prisma.user.findUnique({
-      where: { email },
-      include: {
-        studentProfile: true,
-        company_profiles: true
-      }
+      where: { email }
     });
 
     if (!user) {
+      console.log('❌ Login failed: User not found');
       res.status(401).json({
         success: false,
         message: 'Invalid credentials'
@@ -102,6 +101,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {
+      console.log('❌ Login failed: Invalid password');
       res.status(401).json({
         success: false,
         message: 'Invalid credentials'
@@ -115,11 +115,22 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       data: { lastLogin: new Date() }
     });
 
+    // Fetch user with profiles for response
+    const userWithProfiles = await prisma.user.findUnique({
+      where: { email },
+      include: {
+        studentProfile: true,
+        company_profiles: true
+      }
+    });
+
     // Generate JWT token
     const token = generateToken(user.id);
 
     // Remove password from response
-    const { password: _, ...userWithoutPassword } = user;
+    const { password: _, ...userWithoutPassword } = userWithProfiles || user;
+    
+    console.log('✅ Login successful for user:', email);
 
     res.json({
       success: true,
@@ -131,6 +142,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     });
   } catch (error) {
     logger.error('Login error:', error);
+    console.error('❌ Login server error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error during login'
