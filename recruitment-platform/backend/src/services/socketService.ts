@@ -17,6 +17,12 @@ export const initializeSocket = (io: Server) => {
       logger.info(`🏢 Company ${companyId} joined room: company-${companyId}`);
     });
 
+    // Join all companies room for general updates
+    socket.on('join-companies-room', () => {
+      socket.join('all-companies');
+      logger.info(`🏢 Joined all companies room`);
+    });
+
     // Join job-specific room
     socket.on('join-job-room', (jobId: string) => {
       socket.join(`job-${jobId}`);
@@ -86,15 +92,253 @@ export const initializeSocket = (io: Server) => {
       logger.info(`📅 Interview scheduled for student ${studentId}`);
     });
 
-    // Handle typing indicators
+    // ==================================================================
+    // NEW: COMPANY REAL-TIME FEATURES
+    // ==================================================================
+
+    // Handle company profile updates
+    socket.on('company-profile-updated', (data) => {
+      const { companyId, updates, updatedBy } = data;
+      
+      // Notify all users in company room
+      socket.to(`company-${companyId}`).emit('company-profile-changed', {
+        companyId,
+        updates,
+        updatedBy,
+        timestamp: new Date()
+      });
+
+      // Notify all companies room
+      socket.to('all-companies').emit('company-updated', {
+        companyId,
+        updates,
+        timestamp: new Date()
+      });
+      
+      logger.info(`🏢 Company profile updated: ${companyId}`);
+    });
+
+    // Handle new company registration
+    socket.on('new-company-registered', (data) => {
+      const { company, registeredBy } = data;
+      
+      // Notify all companies room
+      socket.to('all-companies').emit('new-company-added', {
+        company,
+        registeredBy,
+        timestamp: new Date()
+      });
+      
+      logger.info(`🆕 New company registered: ${company.companyName}`);
+    });
+
+    // Handle company follow/unfollow
+    socket.on('company-follow-toggle', (data) => {
+      const { companyId, userId, action, companyName } = data;
+      
+      // Notify company room
+      socket.to(`company-${companyId}`).emit(`company-${action}`, {
+        companyId,
+        userId,
+        companyName,
+        timestamp: new Date()
+      });
+
+      // Notify user
+      socket.to(`user-${userId}`).emit(`company-${action}-confirmed`, {
+        companyId,
+        companyName,
+        timestamp: new Date()
+      });
+      
+      logger.info(`👥 User ${userId} ${action} company ${companyId}`);
+    });
+
+    // Handle company view tracking
+    socket.on('company-view-tracked', (data) => {
+      const { companyId, userId, viewData } = data;
+      
+      // Notify company room for real-time stats
+      socket.to(`company-${companyId}`).emit('company-view-update', {
+        companyId,
+        userId,
+        viewData,
+        timestamp: new Date()
+      });
+
+      // Notify all companies room for trending updates
+      socket.to('all-companies').emit('company-view-tracked', {
+        companyId,
+        totalViews: viewData.totalViews,
+        dailyViews: viewData.dailyViews,
+        timestamp: new Date()
+      });
+      
+      logger.info(`👁️ Company ${companyId} viewed by ${userId || 'anonymous'}`);
+    });
+
+    // Handle job posting by companies
+    socket.on('new-job-posted', (data) => {
+      const { jobId, companyId, jobData } = data;
+      
+      // Notify all users
+      io.emit('new-job-available', {
+        jobId,
+        companyId,
+        jobData,
+        timestamp: new Date()
+      });
+
+      // Notify company followers
+      socket.to(`company-${companyId}`).emit('company-job-posted', {
+        jobId,
+        jobData,
+        timestamp: new Date()
+      });
+      
+      logger.info(`💼 New job posted: ${jobData.title} by company ${companyId}`);
+    });
+
+    // Handle company statistics updates
+    socket.on('company-stats-changed', (data) => {
+      const { companyId, stats } = data;
+      
+      // Notify company room
+      socket.to(`company-${companyId}`).emit('company-stats-updated', {
+        companyId,
+        stats,
+        timestamp: new Date()
+      });
+
+      // Notify all companies room for ranking updates
+      socket.to('all-companies').emit('company-ranking-update', {
+        companyId,
+        stats,
+        timestamp: new Date()
+      });
+      
+      logger.info(`📊 Company stats updated: ${companyId}`);
+    });
+
+    // Handle company verification status changes
+    socket.on('company-verification-changed', (data) => {
+      const { companyId, isVerified, verifiedBy } = data;
+      
+      // Notify company
+      socket.to(`company-${companyId}`).emit('verification-status-changed', {
+        isVerified,
+        verifiedBy,
+        timestamp: new Date()
+      });
+
+      // Notify all companies room
+      socket.to('all-companies').emit('company-verification-update', {
+        companyId,
+        isVerified,
+        timestamp: new Date()
+      });
+      
+      logger.info(`✅ Company verification changed: ${companyId} - ${isVerified ? 'verified' : 'unverified'}`);
+    });
+
+    // Handle bulk company operations (admin)
+    socket.on('bulk-company-operation', (data) => {
+      const { operation, companyIds, operatedBy } = data;
+      
+      // Notify affected companies
+      companyIds.forEach((companyId: string) => {
+        socket.to(`company-${companyId}`).emit('company-bulk-operation', {
+          operation,
+          operatedBy,
+          timestamp: new Date()
+        });
+      });
+
+      // Notify all companies room
+      socket.to('all-companies').emit('companies-bulk-updated', {
+        operation,
+        affectedCount: companyIds.length,
+        operatedBy,
+        timestamp: new Date()
+      });
+      
+      logger.info(`🔄 Bulk operation ${operation} performed on ${companyIds.length} companies`);
+    });
+
+    // ==================================================================
+    // ENHANCED EXISTING FEATURES
+    // ==================================================================
+
+    // Enhanced typing indicators with company context
     socket.on('typing-start', (data) => {
-      const { receiverId, senderId } = data;
-      socket.to(`user-${receiverId}`).emit('user-typing', { senderId });
+      const { receiverId, senderId, context } = data;
+      socket.to(`user-${receiverId}`).emit('user-typing', { 
+        senderId, 
+        context,
+        timestamp: new Date()
+      });
     });
 
     socket.on('typing-stop', (data) => {
-      const { receiverId, senderId } = data;
-      socket.to(`user-${receiverId}`).emit('user-stopped-typing', { senderId });
+      const { receiverId, senderId, context } = data;
+      socket.to(`user-${receiverId}`).emit('user-stopped-typing', { 
+        senderId,
+        context,
+        timestamp: new Date()
+      });
+    });
+
+    // Enhanced notification system
+    socket.on('send-notification', (data) => {
+      const { userId, notification, type } = data;
+      
+      socket.to(`user-${userId}`).emit('new-notification', {
+        ...notification,
+        type,
+        timestamp: new Date()
+      });
+      
+      logger.info(`🔔 Notification sent to user ${userId}: ${type}`);
+    });
+
+    // Broadcast system announcements
+    socket.on('system-announcement', (data) => {
+      const { announcement, targetRooms, announcedBy } = data;
+      
+      targetRooms.forEach((room: string) => {
+        socket.to(room).emit('system-announcement', {
+          announcement,
+          announcedBy,
+          timestamp: new Date()
+        });
+      });
+      
+      logger.info(`📢 System announcement broadcasted to ${targetRooms.length} rooms`);
+    });
+
+    // ==================================================================
+    // CONNECTION MANAGEMENT
+    // ==================================================================
+
+    // Handle room leaving
+    socket.on('leave-room', (room: string) => {
+      socket.leave(room);
+      logger.info(`👋 Socket ${socket.id} left room: ${room}`);
+    });
+
+    // Handle user status updates
+    socket.on('user-status-update', (data) => {
+      const { userId, status, context } = data;
+      
+      // Broadcast to relevant rooms
+      socket.broadcast.emit('user-status-changed', {
+        userId,
+        status,
+        context,
+        timestamp: new Date()
+      });
+      
+      logger.info(`👤 User ${userId} status updated: ${status}`);
     });
 
     // Handle disconnection
@@ -106,28 +350,59 @@ export const initializeSocket = (io: Server) => {
     socket.on('error', (error) => {
       logger.error('Socket error:', error);
     });
+
+    // ==================================================================
+    // ADMIN MONITORING EVENTS
+    // ==================================================================
+
+    // Handle admin connection monitoring
+    socket.on('admin-monitor-start', (adminId: string) => {
+      socket.join('admin-monitoring');
+      logger.info(`👑 Admin ${adminId} started monitoring`);
+    });
+
+    // Broadcast system metrics
+    setInterval(() => {
+      const connectedUsers = io.sockets.sockets.size;
+      const rooms = Array.from(io.sockets.adapter.rooms.keys());
+      
+      io.to('admin-monitoring').emit('system-metrics', {
+        connectedUsers,
+        activeRooms: rooms.length,
+        timestamp: new Date()
+      });
+    }, 30000); // Every 30 seconds
+
+    // Log connection metrics
+    logger.info(`📊 Total connected sockets: ${io.sockets.sockets.size}`);
   });
 
-  // Utility functions for emitting from outside socket handlers
-  return {
-    // Emit to specific user
-    emitTousers: (userId: string, event: string, data: any) => {
-      io.to(`user-${userId}`).emit(event, data);
-    },
+  // ==================================================================
+  // POSTGRESQL NOTIFICATION LISTENERS
+  // ==================================================================
 
-    // Emit to specific company
-    emitToCompany: (companyId: string, event: string, data: any) => {
-      io.to(`company-${companyId}`).emit(event, data);
-    },
-
-    // Emit to all users
-    emitToAll: (event: string, data: any) => {
-      io.emit(event, data);
-    },
-
-    // Emit to specific job room
-    emitToJob: (jobId: string, event: string, data: any) => {
-      io.to(`job-${jobId}`).emit(event, data);
+  // Note: In a production environment, you would set up PostgreSQL LISTEN/NOTIFY
+  // to automatically emit socket events when database triggers fire
+  
+  // Example setup (would require additional PostgreSQL client):
+  /*
+  pgClient.on('notification', (msg) => {
+    const data = JSON.parse(msg.payload);
+    
+    switch (msg.channel) {
+      case 'company_stats_updated':
+        io.to('all-companies').emit('company-stats-updated', data);
+        break;
+      case 'company_view_tracked':
+        io.to(`company-${data.companyId}`).emit('company-view-tracked', data);
+        break;
+      case 'job_application_count_updated':
+        io.to(`company-${data.companyId}`).emit('job-stats-updated', data);
+        break;
+      // ... other database events
     }
-  };
+  });
+  */
+
+  logger.info('🚀 Socket.IO service initialized with company real-time features');
 };

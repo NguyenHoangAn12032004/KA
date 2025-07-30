@@ -189,6 +189,12 @@ app.get('/', (req, res) => {
   });
 });
 
+// Middleware to attach Socket.IO instance to requests
+app.use((req: any, res, next) => {
+  req.io = io;
+  next();
+});
+
 // API routes
 console.log('🔗 Registering API routes...');
 

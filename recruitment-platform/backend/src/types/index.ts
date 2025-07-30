@@ -749,3 +749,22 @@ export interface ErrorResponse {
   details?: any;
   timestamp: Date;
 }
+
+// ================================
+// EXPRESS REQUEST EXTENSIONS
+// ================================
+
+import { Request } from 'express';
+import { Server as SocketIOServer } from 'socket.io';
+
+export interface AuthRequest extends Request {
+  user?: {
+    id: string;
+    email: string;
+    role: UserRole;
+    companyId?: string;
+    isActive: boolean;
+    isVerified: boolean;
+  };
+  io?: SocketIOServer;
+}

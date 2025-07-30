@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Box,
   Paper,
@@ -43,6 +43,12 @@ import {
   Tooltip,
   LinearProgress,
   Skeleton,
+  Snackbar,
+  Alert,
+  CircularProgress,
+  SpeedDial,
+  SpeedDialAction,
+  SpeedDialIcon,
 } from "@mui/material";
 import {
   Search,
@@ -91,9 +97,24 @@ import {
   Twitter,
   Instagram,
   YouTube,
+  FavoriteBorder,
+  Favorite,
+  Share,
+  MoreVert,
+  Analytics,
+  Notifications,
+  NotificationsActive,
+  TrendingFlat,
+  Update,
 } from "@mui/icons-material";
 import { useAuth } from "../contexts/AuthContext";
-import { companiesAPI } from "../services/api";
+import { 
+  companiesAPI, 
+  EnhancedCompany, 
+  CompaniesFilters, 
+  CompaniesResponse 
+} from "../services/api/companiesAPI";
+import socketService from "../services/socketService";
 
 // Modern animations
 const gradientAnimation = keyframes`
@@ -125,46 +146,84 @@ const shimmerAnimation = keyframes`
   100% { transform: translateX(100%); }
 `;
 
-interface Company {
-  id: string;
-  companyName: string;
-  logoUrl?: string;
-  industry: string;
-  companySize: string;
-  location: string;
-  description?: string;
-  website?: string;
-  foundedYear?: number;
-  rating?: number;
-  totalJobs?: number;
-  isVerified?: boolean;
-  isFeatured?: boolean;
-  socialLinks?: {
-    linkedin?: string;
-    facebook?: string;
-    website?: string;
-  };
-}
+const slideInFromRight = keyframes`
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+`;
 
-// Company Card Component
+const bounceIn = keyframes`
+  0% { transform: scale(0.3); opacity: 0; }
+  50% { transform: scale(1.05); }
+  70% { transform: scale(0.9); }
+  100% { transform: scale(1); opacity: 1; }
+`;
+
+// Enhanced company card component
 const CompanyCard: React.FC<{
-  company: Company;
+  company: EnhancedCompany;
   viewMode: "grid" | "list";
-  onCompanyClick: (company: Company) => void;
+  onCompanyClick: (company: EnhancedCompany) => void;
   onBookmarkClick: (companyId: string) => void;
+  onFollowClick: (companyId: string) => void;
+  onShareClick: (company: EnhancedCompany) => void;
   isBookmarked?: boolean;
+  isFollowing?: boolean;
+  showRealTimeStats?: boolean;
 }> = ({
   company,
   viewMode,
   onCompanyClick,
   onBookmarkClick,
+  onFollowClick,
+  onShareClick,
   isBookmarked = false,
+  isFollowing = false,
+  showRealTimeStats = true,
 }) => {
   const theme = useTheme();
   const [isHovered, setIsHovered] = useState(false);
+  const [realTimeStats, setRealTimeStats] = useState({
+    viewCount: company.viewCount || 0,
+    followerCount: company.followers || 0,
+    activeJobs: company.activeJobs || 0,
+    lastUpdate: new Date()
+  });
+
+  // Real-time stats updates
+  useEffect(() => {
+    if (!showRealTimeStats) return;
+
+    const handleStatsUpdate = (data: any) => {
+      if (data.companyId === company.id) {
+        setRealTimeStats(prev => ({
+          ...prev,
+          ...data.stats,
+          lastUpdate: new Date()
+        }));
+      }
+    };
+
+    const handleViewUpdate = (data: any) => {
+      if (data.companyId === company.id) {
+        setRealTimeStats(prev => ({
+          ...prev,
+          viewCount: data.totalViews,
+          lastUpdate: new Date()
+        }));
+      }
+    };
+
+    socketService.on('company-stats-updated', handleStatsUpdate);
+    socketService.on('company-view-tracked', handleViewUpdate);
+
+          return () => {
+        socketService.off('company-stats-updated');
+        socketService.off('company-view-tracked');
+      };
+  }, [company.id, showRealTimeStats]);
 
   const getSizeColor = (size: string) => {
-    switch (size.toLowerCase()) {
+    switch (size?.toLowerCase()) {
       case "startup":
         return theme.palette.info.main;
       case "1-50":
@@ -179,6 +238,17 @@ const CompanyCard: React.FC<{
         return theme.palette.grey[500];
     }
   };
+
+  const handleCardClick = useCallback(() => {
+    // Track view
+    companiesAPI.trackView(company.id, {
+      userId: undefined, // Will be set from auth context
+      ipAddress: 'unknown',
+      userAgent: navigator.userAgent
+    }).catch(console.error);
+    
+    onCompanyClick(company);
+  }, [company, onCompanyClick]);
 
   if (viewMode === "list") {
     return (
@@ -214,9 +284,9 @@ const CompanyCard: React.FC<{
             left: "100%",
           },
         }}
-        onClick={() => onCompanyClick(company)}
+        onClick={handleCardClick}
       >
-        {/* Featured/Hot Badges */}
+        {/* Enhanced Badges */}
         {(company.isFeatured || company.isVerified) && (
           <Box
             sx={{
@@ -251,31 +321,73 @@ const CompanyCard: React.FC<{
           </Box>
         )}
 
-        {/* Bookmark Button */}
+        {/* Enhanced Action Buttons */}
         <Box
           sx={{
             position: "absolute",
             top: 16,
             right: 16,
             zIndex: 2,
+            display: "flex",
+            gap: 1,
           }}
         >
-          <IconButton
-            onClick={(e) => {
-              e.stopPropagation();
-              onBookmarkClick(company.id);
-            }}
-            sx={{
-              background: alpha(theme.palette.background.paper, 0.9),
-              backdropFilter: "blur(10px)",
-              "&:hover": {
-                background: alpha(theme.palette.primary.main, 0.1),
-                transform: "scale(1.1)",
-              },
-            }}
-          >
-            {isBookmarked ? <Bookmark color="primary" /> : <BookmarkBorder />}
-          </IconButton>
+          <Tooltip title={isFollowing ? "Unfollow" : "Follow"}>
+            <IconButton
+              onClick={(e) => {
+                e.stopPropagation();
+                onFollowClick(company.id);
+              }}
+              sx={{
+                background: alpha(theme.palette.background.paper, 0.9),
+                backdropFilter: "blur(10px)",
+                "&:hover": {
+                  background: alpha(theme.palette.secondary.main, 0.1),
+                  transform: "scale(1.1)",
+                },
+              }}
+            >
+              {isFollowing ? <Favorite color="secondary" /> : <FavoriteBorder />}
+            </IconButton>
+          </Tooltip>
+          
+          <Tooltip title={isBookmarked ? "Unbookmark" : "Bookmark"}>
+            <IconButton
+              onClick={(e) => {
+                e.stopPropagation();
+                onBookmarkClick(company.id);
+              }}
+              sx={{
+                background: alpha(theme.palette.background.paper, 0.9),
+                backdropFilter: "blur(10px)",
+                "&:hover": {
+                  background: alpha(theme.palette.primary.main, 0.1),
+                  transform: "scale(1.1)",
+                },
+              }}
+            >
+              {isBookmarked ? <Bookmark color="primary" /> : <BookmarkBorder />}
+            </IconButton>
+          </Tooltip>
+
+          <Tooltip title="Share">
+            <IconButton
+              onClick={(e) => {
+                e.stopPropagation();
+                onShareClick(company);
+              }}
+              sx={{
+                background: alpha(theme.palette.background.paper, 0.9),
+                backdropFilter: "blur(10px)",
+                "&:hover": {
+                  background: alpha(theme.palette.info.main, 0.1),
+                  transform: "scale(1.1)",
+                },
+              }}
+            >
+              <Share />
+            </IconButton>
+          </Tooltip>
         </Box>
 
         <CardContent sx={{ p: 3 }}>
@@ -295,6 +407,15 @@ const CompanyCard: React.FC<{
             <Box sx={{ flex: 1 }}>
               <Typography variant="h5" fontWeight={700} sx={{ mb: 1 }}>
                 {company.companyName}
+                {showRealTimeStats && (
+                  <Chip
+                    label={`${realTimeStats.viewCount} views`}
+                    size="small"
+                    color="info"
+                    variant="outlined"
+                    sx={{ ml: 2, fontSize: '0.7rem' }}
+                  />
+                )}
               </Typography>
               <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
                 {company.industry}
@@ -322,13 +443,21 @@ const CompanyCard: React.FC<{
                 <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                   <Work color="action" fontSize="small" />
                   <Typography variant="body2">
-                    {company.totalJobs || 0} việc làm
+                    {realTimeStats.activeJobs} việc làm
                   </Typography>
                 </Box>
                 {company.rating && (
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                     <Rating value={company.rating} readOnly size="small" />
                     <Typography variant="body2">{company.rating}/5</Typography>
+                  </Box>
+                )}
+                {showRealTimeStats && (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                    <Groups color="action" fontSize="small" />
+                    <Typography variant="body2">
+                      {realTimeStats.followerCount} followers
+                    </Typography>
                   </Box>
                 )}
               </Box>
@@ -338,9 +467,9 @@ const CompanyCard: React.FC<{
                   label={company.companySize}
                   size="small"
                   sx={{
-                    background: alpha(getSizeColor(company.companySize), 0.1),
-                    color: getSizeColor(company.companySize),
-                    border: `1px solid ${alpha(getSizeColor(company.companySize), 0.3)}`,
+                    background: alpha(getSizeColor(company.companySize || ''), 0.1),
+                    color: getSizeColor(company.companySize || ''),
+                    border: `1px solid ${alpha(getSizeColor(company.companySize || ''), 0.3)}`,
                     fontWeight: 600,
                   }}
                 />
@@ -354,6 +483,15 @@ const CompanyCard: React.FC<{
                   <Chip
                     label={`Thành lập ${company.foundedYear}`}
                     size="small"
+                    variant="outlined"
+                  />
+                )}
+                {showRealTimeStats && realTimeStats.lastUpdate && (
+                  <Chip
+                    icon={<Update />}
+                    label={`Updated ${Math.floor((Date.now() - realTimeStats.lastUpdate.getTime()) / 60000)}m ago`}
+                    size="small"
+                    color="info"
                     variant="outlined"
                   />
                 )}
@@ -373,7 +511,7 @@ const CompanyCard: React.FC<{
                 size="large"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onCompanyClick(company);
+                  handleCardClick();
                 }}
                 sx={{
                   minWidth: 140,
@@ -390,7 +528,14 @@ const CompanyCard: React.FC<{
               {company.socialLinks && (
                 <Box sx={{ display: "flex", gap: 1 }}>
                   {company.socialLinks.linkedin && (
-                    <IconButton size="small" sx={{ color: "#0077B5" }}>
+                    <IconButton 
+                      size="small" 
+                      sx={{ color: "#0077B5" }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        window.open(company.socialLinks!.linkedin, '_blank');
+                      }}
+                    >
                       <LinkedIn />
                     </IconButton>
                   )}
@@ -398,6 +543,10 @@ const CompanyCard: React.FC<{
                     <IconButton
                       size="small"
                       sx={{ color: theme.palette.info.main }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        window.open(company.socialLinks!.website, '_blank');
+                      }}
                     >
                       <Public />
                     </IconButton>
@@ -411,50 +560,40 @@ const CompanyCard: React.FC<{
     );
   }
 
-  // Grid view
+  // Grid view (enhanced)
   return (
     <Card
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       sx={{
-        height: "100%",
+        height: 400, // Fixed height for consistency
         cursor: "pointer",
         position: "relative",
         overflow: "hidden",
         background: isHovered
-          ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.02)} 0%, ${alpha(theme.palette.secondary.main, 0.02)} 100%)`
+          ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.03)} 0%, ${alpha(theme.palette.secondary.main, 0.03)} 100%)`
           : theme.palette.background.paper,
-        border: `2px solid ${isHovered ? theme.palette.primary.main : "transparent"}`,
-        borderRadius: 3,
-        transition: "all 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
+        border: `1px solid ${isHovered ? theme.palette.primary.main : alpha(theme.palette.divider, 0.1)}`,
+        borderRadius: 4,
+        transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
         "&:hover": {
-          transform: "translateY(-8px) scale(1.02)",
-          boxShadow: `0 16px 40px ${alpha(theme.palette.primary.main, 0.2)}`,
+          transform: "translateY(-4px)",
+          boxShadow: `0 12px 32px ${alpha(theme.palette.primary.main, 0.15)}`,
+          borderColor: theme.palette.primary.main,
         },
-        "&::before": {
-          content: '""',
-          position: "absolute",
-          top: 0,
-          left: "-100%",
-          width: "100%",
-          height: "100%",
-          background: `linear-gradient(90deg, transparent, ${alpha(theme.palette.primary.main, 0.1)}, transparent)`,
-          transition: "left 0.6s ease",
-        },
-        "&:hover::before": {
-          left: "100%",
-        },
+        // Modern shadow style like LinkedIn
+        boxShadow: `0 2px 8px ${alpha(theme.palette.common.black, 0.1)}`,
       }}
-      onClick={() => onCompanyClick(company)}
+      onClick={handleCardClick}
     >
-      {/* Badges */}
+      {/* Enhanced Badges - LinkedIn style */}
       {(company.isFeatured || company.isVerified) && (
         <Box
           sx={{
             position: "absolute",
-            top: 12,
-            left: 12,
-            zIndex: 2,
+            top: 16,
+            left: 16,
+            zIndex: 3,
             display: "flex",
             flexDirection: "column",
             gap: 0.5,
@@ -462,131 +601,220 @@ const CompanyCard: React.FC<{
         >
           {company.isFeatured && (
             <Chip
-              label="🔥"
+              label="FEATURED"
               size="small"
-              color="error"
               sx={{
+                background: `linear-gradient(135deg, #FF6B35, #F7931E)`,
+                color: 'white',
                 fontWeight: 700,
-                animation: `${pulseGlow} 2s ease-in-out infinite`,
-                width: 32,
-                height: 32,
+                fontSize: '0.65rem',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+                height: 20,
+                '& .MuiChip-label': { px: 1 },
+                boxShadow: `0 2px 8px ${alpha('#FF6B35', 0.3)}`,
               }}
             />
           )}
           {company.isVerified && (
             <Chip
-              icon={<Verified />}
-              label=""
+              icon={<Verified sx={{ fontSize: 12 }} />}
+              label="VERIFIED"
               size="small"
-              color="success"
-              sx={{ width: 32, height: 32 }}
+              sx={{
+                background: theme.palette.success.main,
+                color: 'white',
+                fontWeight: 600,
+                fontSize: '0.65rem',
+                height: 20,
+                '& .MuiChip-label': { px: 1 },
+              }}
             />
           )}
         </Box>
       )}
 
-      {/* Bookmark */}
+      {/* Action Buttons - Modern style */}
       <Box
         sx={{
           position: "absolute",
-          top: 12,
-          right: 12,
-          zIndex: 2,
+          top: 16,
+          right: 16,
+          zIndex: 3,
+          display: "flex",
+          gap: 0.5,
         }}
       >
-        <IconButton
-          onClick={(e) => {
-            e.stopPropagation();
-            onBookmarkClick(company.id);
-          }}
-          size="small"
-          sx={{
-            background: alpha(theme.palette.background.paper, 0.9),
-            backdropFilter: "blur(10px)",
-            "&:hover": {
-              background: alpha(theme.palette.primary.main, 0.1),
-              transform: "scale(1.1)",
-            },
-          }}
-        >
-          {isBookmarked ? <Bookmark color="primary" /> : <BookmarkBorder />}
-        </IconButton>
+        <Tooltip title={isFollowing ? "Bỏ theo dõi" : "Theo dõi công ty"}>
+          <IconButton
+            onClick={(e) => {
+              e.stopPropagation();
+              onFollowClick(company.id);
+            }}
+            size="small"
+            sx={{
+              background: alpha(theme.palette.background.paper, 0.9),
+              backdropFilter: "blur(10px)",
+              border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+              width: 32,
+              height: 32,
+              "&:hover": {
+                background: isFollowing ? alpha(theme.palette.error.main, 0.1) : alpha(theme.palette.primary.main, 0.1),
+                transform: "scale(1.05)",
+              },
+            }}
+          >
+            {isFollowing ? <Favorite sx={{ fontSize: 16, color: theme.palette.error.main }} /> : <FavoriteBorder sx={{ fontSize: 16 }} />}
+          </IconButton>
+        </Tooltip>
+        
+        <Tooltip title="Lưu công ty">
+          <IconButton
+            onClick={(e) => {
+              e.stopPropagation();
+              onBookmarkClick(company.id);
+            }}
+            size="small"
+            sx={{
+              background: alpha(theme.palette.background.paper, 0.9),
+              backdropFilter: "blur(10px)",
+              border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+              width: 32,
+              height: 32,
+              "&:hover": {
+                background: alpha(theme.palette.primary.main, 0.1),
+                transform: "scale(1.05)",
+              },
+            }}
+          >
+            {isBookmarked ? <Bookmark sx={{ fontSize: 16, color: theme.palette.primary.main }} /> : <BookmarkBorder sx={{ fontSize: 16 }} />}
+          </IconButton>
+        </Tooltip>
       </Box>
 
       <CardContent
-        sx={{ p: 3, height: "100%", display: "flex", flexDirection: "column" }}
+        sx={{ 
+          p: 3, 
+          height: "100%", 
+          display: "flex", 
+          flexDirection: "column",
+          justifyContent: "space-between",
+        }}
       >
-        {/* Company Logo & Name */}
+        {/* Company Logo & Name - Modern LinkedIn style */}
         <Box sx={{ textAlign: "center", mb: 2 }}>
           <Avatar
             src={company.logoUrl}
             sx={{
-              width: 80,
-              height: 80,
+              width: 64,
+              height: 64,
               mx: "auto",
               mb: 2,
-              border: `3px solid ${theme.palette.primary.main}`,
-              boxShadow: `0 4px 12px ${alpha(theme.palette.primary.main, 0.3)}`,
+              border: `2px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+              boxShadow: `0 4px 16px ${alpha(theme.palette.common.black, 0.1)}`,
+              background: theme.palette.background.paper,
             }}
           >
-            {company.companyName.charAt(0)}
+            <Typography variant="h6" fontWeight={700} color="primary">
+              {company.companyName.charAt(0)}
+            </Typography>
           </Avatar>
-          <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>
+          <Typography 
+            variant="h6" 
+            fontWeight={600} 
+            sx={{ 
+              mb: 0.5,
+              fontSize: '1.1rem',
+              lineHeight: 1.3,
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+            }}
+          >
             {company.companyName}
           </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {company.industry}
+          <Typography 
+            variant="body2" 
+            color="text.secondary"
+            sx={{ fontWeight: 500 }}
+          >
+            {company.industry || 'Technology'}
           </Typography>
         </Box>
 
-        {/* Company Info */}
-        <Stack spacing={1} sx={{ mb: 2, flex: 1 }}>
+        {/* Real-time Stats - Enhanced */}
+        {showRealTimeStats && (
+          <Box sx={{ textAlign: "center", mb: 2 }}>
+            <Stack direction="row" spacing={1} justifyContent="center">
+              <Chip
+                icon={<Visibility sx={{ fontSize: 14 }} />}
+                label={`${realTimeStats.viewCount} views`}
+                size="small"
+                variant="outlined"
+                sx={{
+                  fontSize: '0.7rem',
+                  height: 24,
+                  border: `1px solid ${alpha(theme.palette.info.main, 0.3)}`,
+                  color: theme.palette.info.main,
+                  '& .MuiChip-icon': { color: theme.palette.info.main },
+                }}
+              />
+              <Chip
+                icon={<Groups sx={{ fontSize: 14 }} />}
+                label={`${realTimeStats.followerCount} followers`}
+                size="small"
+                variant="outlined"
+                sx={{
+                  fontSize: '0.7rem',
+                  height: 24,
+                  border: `1px solid ${alpha(theme.palette.secondary.main, 0.3)}`,
+                  color: theme.palette.secondary.main,
+                  '& .MuiChip-icon': { color: theme.palette.secondary.main },
+                }}
+              />
+            </Stack>
+          </Box>
+        )}
+
+        {/* Company Info - Clean layout without employee count */}
+        <Stack spacing={1.5} sx={{ mb: 2, flex: 1 }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <LocationOn color="action" fontSize="small" />
-            <Typography variant="body2" noWrap>
+            <LocationOn sx={{ fontSize: 16, color: theme.palette.text.secondary }} />
+            <Typography 
+              variant="body2" 
+              noWrap
+              sx={{ fontWeight: 500, color: theme.palette.text.primary }}
+            >
               {company.location}
             </Typography>
           </Box>
+          
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <People color="action" fontSize="small" />
-            <Typography variant="body2">{company.companySize}</Typography>
-          </Box>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <Work color="action" fontSize="small" />
-            <Typography variant="body2">
-              {company.totalJobs || 0} việc làm
+            <Work sx={{ fontSize: 16, color: theme.palette.text.secondary }} />
+            <Typography 
+              variant="body2"
+              sx={{ fontWeight: 500, color: theme.palette.text.primary }}
+            >
+              {realTimeStats.activeJobs} job{realTimeStats.activeJobs !== 1 ? 's' : ''} available
             </Typography>
           </Box>
-          {company.rating && (
+          
+          {/* Display last job posted instead of rating */}
+          {company.lastJobPosted && (
             <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-              <Star color="action" fontSize="small" />
-              <Typography variant="body2">{company.rating}/5</Typography>
+              <Schedule sx={{ fontSize: 16, color: theme.palette.text.secondary }} />
+              <Typography 
+                variant="body2"
+                sx={{ fontWeight: 500, color: theme.palette.text.primary }}
+              >
+                Last posted: {new Date(company.lastJobPosted).toLocaleDateString()}
+              </Typography>
             </Box>
           )}
         </Stack>
 
-        {/* Tags */}
-        <Box
-          sx={{
-            display: "flex",
-            gap: 0.5,
-            mb: 2,
-            flexWrap: "wrap",
-            justifyContent: "center",
-          }}
-        >
-          <Chip
-            label={company.companySize}
-            size="small"
-            sx={{
-              background: alpha(getSizeColor(company.companySize), 0.1),
-              color: getSizeColor(company.companySize),
-              fontWeight: 600,
-            }}
-          />
-        </Box>
-
-        {/* Description */}
+        {/* Description - Limited lines */}
         {company.description && (
           <Typography
             variant="body2"
@@ -598,30 +826,36 @@ const CompanyCard: React.FC<{
               WebkitBoxOrient: "vertical",
               overflow: "hidden",
               lineHeight: 1.4,
-              textAlign: "center",
+              fontSize: '0.875rem',
             }}
           >
             {company.description}
           </Typography>
         )}
 
-        {/* Action Button */}
+        {/* Action Button - Modern style */}
         <Button
           variant="contained"
           fullWidth
           onClick={(e) => {
             e.stopPropagation();
-            onCompanyClick(company);
+            handleCardClick();
           }}
           sx={{
-            background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+            borderRadius: 2,
+            textTransform: 'none',
+            fontWeight: 600,
+            height: 40,
+            background: theme.palette.primary.main,
+            color: 'white',
             "&:hover": {
+              background: theme.palette.primary.dark,
               transform: "translateY(-1px)",
-              boxShadow: `0 4px 12px ${alpha(theme.palette.primary.main, 0.4)}`,
+              boxShadow: `0 6px 16px ${alpha(theme.palette.primary.main, 0.3)}`,
             },
           }}
         >
-          Xem chi tiết
+          View Company
         </Button>
       </CardContent>
     </Card>
@@ -848,17 +1082,27 @@ const CompaniesPage: React.FC = () => {
   const { user } = useAuth();
   const theme = useTheme();
   const [loading, setLoading] = useState(true);
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [filteredCompanies, setFilteredCompanies] = useState<Company[]>([]);
+  const [companies, setCompanies] = useState<EnhancedCompany[]>([]);
+  const [filteredCompanies, setFilteredCompanies] = useState<EnhancedCompany[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filters, setFilters] = useState<any>({});
+  const [filters, setFilters] = useState<any>({
+    industries: [],
+    sizes: [],
+    locations: [],
+    featured: []
+  });
+  const [quickFilters, setQuickFilters] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState("newest");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [currentPage, setCurrentPage] = useState(1);
   const [companiesPerPage] = useState(12);
-  const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
+  const [selectedCompany, setSelectedCompany] = useState<EnhancedCompany | null>(null);
   const [companyDetailOpen, setCompanyDetailOpen] = useState(false);
   const [bookmarkedCompanies, setBookmarkedCompanies] = useState<string[]>([]);
+  const [followingCompanies, setFollowingCompanies] = useState<string[]>([]);
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState("");
+  const [snackbarSeverity, setSnackbarSeverity] = useState<"success" | "error" | "info" | "warning">("info");
 
   useEffect(() => {
     loadCompanies();
@@ -866,7 +1110,7 @@ const CompaniesPage: React.FC = () => {
 
   useEffect(() => {
     applyFilters();
-  }, [companies, searchTerm, filters, sortBy]);
+  }, [companies, searchTerm, filters, sortBy, quickFilters]);
 
   const loadCompanies = async () => {
     try {
@@ -882,7 +1126,7 @@ const CompaniesPage: React.FC = () => {
   };
 
   const applyFilters = () => {
-    let filtered = [...companies];
+    let filtered = [...(companies || [])];
 
     // Search filter
     if (searchTerm) {
@@ -891,42 +1135,42 @@ const CompaniesPage: React.FC = () => {
           company.companyName
             .toLowerCase()
             .includes(searchTerm.toLowerCase()) ||
-          company.industry.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (company.industry && company.industry.toLowerCase().includes(searchTerm.toLowerCase())) ||
           company.location.toLowerCase().includes(searchTerm.toLowerCase()),
       );
     }
 
     // Industry filter
-    if (filters.industries && filters.industries.length > 0) {
+    if (filters.industries && Array.isArray(filters.industries) && filters.industries.length > 0) {
       filtered = filtered.filter((company) =>
         filters.industries.includes(company.industry),
       );
     }
 
     // Size filter
-    if (filters.sizes && filters.sizes.length > 0) {
+    if (filters.sizes && Array.isArray(filters.sizes) && filters.sizes.length > 0) {
       filtered = filtered.filter((company) =>
         filters.sizes.includes(company.companySize),
       );
     }
 
     // Location filter
-    if (filters.locations && filters.locations.length > 0) {
+    if (filters.locations && Array.isArray(filters.locations) && filters.locations.length > 0) {
       filtered = filtered.filter((company) =>
         filters.locations.includes(company.location),
       );
     }
 
-    // Feature filters
-    if (filters.featured && filters.featured.length > 0) {
-      if (filters.featured.includes("verified")) {
+    // Feature filters (from quickFilters)
+    if (quickFilters && Array.isArray(quickFilters) && quickFilters.length > 0) {
+      if (quickFilters.includes("verified")) {
         filtered = filtered.filter((company) => company.isVerified);
       }
-      if (filters.featured.includes("featured")) {
+      if (quickFilters.includes("featured")) {
         filtered = filtered.filter((company) => company.isFeatured);
       }
-      if (filters.featured.includes("hiring")) {
-        filtered = filtered.filter((company) => (company.totalJobs || 0) > 0);
+      if (quickFilters.includes("hiring")) {
+        filtered = filtered.filter((company) => (company.activeJobs || 0) > 0);
       }
     }
 
@@ -938,9 +1182,9 @@ const CompaniesPage: React.FC = () => {
         case "rating":
           return (b.rating || 0) - (a.rating || 0);
         case "jobs":
-          return (b.totalJobs || 0) - (a.totalJobs || 0);
+          return (b.activeJobs || 0) - (a.activeJobs || 0);
         case "size":
-          return a.companySize.localeCompare(b.companySize);
+          return (a.companySize || '').localeCompare(b.companySize || '');
         default:
           return 0;
       }
@@ -950,16 +1194,26 @@ const CompaniesPage: React.FC = () => {
     setCurrentPage(1);
   };
 
+  const handleQuickFilterChange = (event: React.MouseEvent<HTMLElement>, newFilters: string[]) => {
+    setQuickFilters(newFilters || []);
+  };
+
   const handleSearch = () => {
     applyFilters();
   };
 
   const handleClearFilters = () => {
-    setFilters({});
+    setFilters({
+      industries: [],
+      sizes: [],
+      locations: [],
+      featured: []
+    });
+    setQuickFilters([]);
     setSearchTerm("");
   };
 
-  const handleCompanyClick = (company: Company) => {
+  const handleCompanyClick = (company: EnhancedCompany) => {
     setSelectedCompany(company);
     setCompanyDetailOpen(true);
   };
@@ -972,14 +1226,36 @@ const CompaniesPage: React.FC = () => {
     );
   };
 
-  // Pagination
+  const handleFollowClick = (companyId: string) => {
+    setFollowingCompanies((prev) =>
+      prev.includes(companyId)
+        ? prev.filter((id) => id !== companyId)
+        : [...prev, companyId],
+    );
+  };
+
+  const handleShareClick = (company: EnhancedCompany) => {
+    const url = `${window.location.origin}/companies/${company.id}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setSnackbarMessage("Company link copied to clipboard!");
+      setSnackbarSeverity("success");
+      setSnackbarOpen(true);
+    }).catch(() => {
+      setSnackbarMessage("Failed to copy company link.");
+      setSnackbarSeverity("error");
+      setSnackbarOpen(true);
+    });
+  };
+
+  // Pagination - Safe array access
+  const safeFilteredCompanies = filteredCompanies || [];
   const indexOfLastCompany = currentPage * companiesPerPage;
   const indexOfFirstCompany = indexOfLastCompany - companiesPerPage;
-  const currentCompanies = filteredCompanies.slice(
+  const currentCompanies = safeFilteredCompanies.slice(
     indexOfFirstCompany,
     indexOfLastCompany,
   );
-  const totalPages = Math.ceil(filteredCompanies.length / companiesPerPage);
+  const totalPages = Math.ceil(safeFilteredCompanies.length / companiesPerPage);
 
   if (loading) {
     return (
@@ -1045,56 +1321,88 @@ const CompaniesPage: React.FC = () => {
         },
       }}
     >
-      <Container maxWidth="xl" sx={{ py: 4, position: "relative", zIndex: 1 }}>
-        {/* Header */}
-        <Slide direction="down" in timeout={800}>
-          <Box sx={{ textAlign: "center", mb: 4 }}>
+      {/* Header Section - Modern style */}
+      <Box
+        sx={{
+          background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
+          color: 'white',
+          py: 6,
+          px: 3,
+          borderRadius: 4,
+          mb: 4,
+          position: 'relative',
+          overflow: 'hidden',
+          '&::before': {
+            content: '""',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'url("data:image/svg+xml,%3Csvg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg"%3E%3Cg fill="none" fill-rule="evenodd"%3E%3Cg fill="%23ffffff" fill-opacity="0.05"%3E%3Ccircle cx="30" cy="30" r="4"/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")',
+            opacity: 0.3,
+          }
+        }}
+      >
+        <Container maxWidth="lg">
+          <Box sx={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
             <Typography
               variant="h3"
+              fontWeight={700}
+              gutterBottom
               sx={{
-                fontWeight: 800,
+                fontSize: { xs: '2rem', md: '3rem' },
                 mb: 2,
-                background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
+                background: 'linear-gradient(45deg, #ffffff, #f0f0f0)',
+                backgroundClip: 'text',
+                WebkitBackgroundClip: 'text',
+                color: 'transparent',
+                WebkitTextFillColor: 'transparent',
               }}
             >
-              🏢 Khám phá doanh nghiệp
+              🏢 Explore Companies
             </Typography>
             <Typography
               variant="h6"
-              color="text.secondary"
-              sx={{ maxWidth: "600px", mx: "auto", lineHeight: 1.7 }}
+              sx={{
+                opacity: 0.9,
+                fontSize: { xs: '1rem', md: '1.25rem' },
+                fontWeight: 400,
+                maxWidth: 600,
+                mx: 'auto',
+                lineHeight: 1.6,
+              }}
             >
-              Tìm hiểu và kết nối với những doanh nghiệp uy tín, môi trường làm
-              việc tuyệt vời
+              Discover amazing companies, connect with top employers, and find your dream job
             </Typography>
           </Box>
-        </Slide>
+        </Container>
+      </Box>
 
-        {/* Search Bar */}
+      <Container maxWidth="xl" sx={{ py: 4, position: "relative", zIndex: 1 }}>
+        {/* Search and Filters - Modern LinkedIn style */}
         <Card
           sx={{
-            background: `linear-gradient(135deg, 
-              ${alpha(theme.palette.background.paper, 0.95)} 0%, 
-              ${alpha(theme.palette.background.paper, 0.9)} 100%)`,
-            backdropFilter: "blur(20px)",
+            mb: 4,
+            borderRadius: 4,
+            boxShadow: `0 4px 20px ${alpha(theme.palette.common.black, 0.08)}`,
             border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-            borderRadius: 3,
-            mb: 3,
+            background: theme.palette.background.paper,
           }}
         >
-          <CardContent sx={{ p: 3 }}>
-            <Box sx={{ display: "flex", gap: 2 }}>
+          <CardContent sx={{ p: 4 }}>
+            {/* Search Bar */}
+            <Box sx={{ mb: 3 }}>
               <TextField
                 fullWidth
-                placeholder="Tìm kiếm công ty, ngành nghề, địa điểm..."
+                variant="outlined"
+                placeholder="Search companies by name, industry, location..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
-                      <Search color="action" />
+                      <Search sx={{ color: theme.palette.text.secondary }} />
                     </InputAdornment>
                   ),
                   endAdornment: searchTerm && (
@@ -1102,93 +1410,153 @@ const CompaniesPage: React.FC = () => {
                       <IconButton
                         onClick={() => setSearchTerm("")}
                         size="small"
+                        sx={{ color: theme.palette.text.secondary }}
                       >
                         <Clear />
                       </IconButton>
                     </InputAdornment>
                   ),
+                  sx: {
+                    borderRadius: 3,
+                    backgroundColor: alpha(theme.palette.background.default, 0.5),
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: alpha(theme.palette.divider, 0.2),
+                    },
+                    '&:hover .MuiOutlinedInput-notchedOutline': {
+                      borderColor: theme.palette.primary.main,
+                    },
+                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                      borderColor: theme.palette.primary.main,
+                      borderWidth: 2,
+                    },
+                    height: 56,
+                    fontSize: '1rem',
+                  }
                 }}
                 sx={{
-                  "& .MuiOutlinedInput-root": {
-                    borderRadius: 3,
-                    background: alpha(theme.palette.background.paper, 0.8),
+                  '& .MuiInputBase-input': {
+                    fontSize: '1rem',
+                    fontWeight: 500,
                   },
+                  '& .MuiInputBase-input::placeholder': {
+                    color: theme.palette.text.secondary,
+                    opacity: 0.8,
+                  }
                 }}
               />
-              <Button
-                variant="contained"
-                onClick={handleSearch}
-                startIcon={<Search />}
+            </Box>
+
+            {/* Quick Filters */}
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center', mb: 3 }}>
+              <Typography variant="body2" fontWeight={600} color="text.secondary">
+                Quick filters:
+              </Typography>
+              <ToggleButtonGroup
+                size="small"
+                value={quickFilters}
+                onChange={handleQuickFilterChange}
                 sx={{
-                  px: 4,
-                  borderRadius: 3,
-                  background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-                  "&:hover": {
-                    transform: "translateY(-1px)",
-                    boxShadow: `0 8px 20px ${alpha(theme.palette.primary.main, 0.4)}`,
+                  '& .MuiToggleButton-root': {
+                    borderRadius: 3,
+                    textTransform: 'none',
+                    fontWeight: 500,
+                    px: 2,
+                    py: 0.5,
+                    border: `1px solid ${alpha(theme.palette.divider, 0.3)}`,
+                    '&.Mui-selected': {
+                      backgroundColor: theme.palette.primary.main,
+                      color: 'white',
+                      '&:hover': {
+                        backgroundColor: theme.palette.primary.dark,
+                      },
+                    },
+                    '&:hover': {
+                      backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                    },
                   },
                 }}
               >
-                Tìm kiếm
-              </Button>
+                <ToggleButton value="verified">
+                  <Verified sx={{ fontSize: 16, mr: 0.5 }} />
+                  Verified
+                </ToggleButton>
+                <ToggleButton value="featured">
+                  <Star sx={{ fontSize: 16, mr: 0.5 }} />
+                  Featured
+                </ToggleButton>
+                <ToggleButton value="hiring">
+                  <Work sx={{ fontSize: 16, mr: 0.5 }} />
+                  Actively Hiring
+                </ToggleButton>
+              </ToggleButtonGroup>
+
+              {(searchTerm || (quickFilters && quickFilters.length > 0) || Object.values(filters || {}).some(f => Array.isArray(f) && f.length > 0)) && (
+                <Button
+                  startIcon={<Clear />}
+                  onClick={handleClearFilters}
+                  size="small"
+                  sx={{
+                    color: theme.palette.text.secondary,
+                    textTransform: 'none',
+                    fontWeight: 500,
+                  }}
+                >
+                  Clear all
+                </Button>
+              )}
             </Box>
-          </CardContent>
-        </Card>
 
-        {/* Filters */}
-        <CompanyFilters
-          filters={filters}
-          setFilters={setFilters}
-          onClearFilters={handleClearFilters}
-        />
-
-        {/* Controls Bar */}
-        <Card
-          sx={{
-            background: `linear-gradient(135deg, 
-              ${alpha(theme.palette.background.paper, 0.9)} 0%, 
-              ${alpha(theme.palette.background.paper, 0.7)} 100%)`,
-            backdropFilter: "blur(20px)",
-            border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-            borderRadius: 2,
-            mb: 3,
-          }}
-        >
-          <CardContent sx={{ py: 2 }}>
+            {/* Results and Controls */}
             <Box
               sx={{
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
+                flexWrap: "wrap",
+                gap: 2,
               }}
             >
-              <Typography variant="body1" fontWeight={600}>
-                {filteredCompanies.length} công ty được tìm thấy
+              <Typography variant="body1" fontWeight={600} color="text.primary">
+                {safeFilteredCompanies.length} compan{safeFilteredCompanies.length !== 1 ? 'ies' : 'y'} found
               </Typography>
 
               <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-                {/* Sort */}
+                {/* Sort Dropdown */}
                 <FormControl size="small" sx={{ minWidth: 120 }}>
-                  <InputLabel>Sắp xếp</InputLabel>
+                  <InputLabel>Sort by</InputLabel>
                   <Select
                     value={sortBy}
+                    label="Sort by"
                     onChange={(e) => setSortBy(e.target.value)}
-                    label="Sắp xếp"
-                    sx={{ borderRadius: 2 }}
+                    sx={{
+                      borderRadius: 2,
+                      '& .MuiSelect-select': {
+                        fontWeight: 500,
+                      },
+                    }}
                   >
-                    <MenuItem value="newest">Mới nhất</MenuItem>
-                    <MenuItem value="name">Tên A-Z</MenuItem>
-                    <MenuItem value="rating">Đánh giá cao</MenuItem>
-                    <MenuItem value="jobs">Nhiều việc làm</MenuItem>
+                    <MenuItem value="newest">Newest</MenuItem>
+                    <MenuItem value="name">Company Name</MenuItem>
+                    <MenuItem value="jobs">Most Jobs</MenuItem>
+                    <MenuItem value="rating">Highest Rated</MenuItem>
                   </Select>
                 </FormControl>
 
-                {/* View Mode */}
+                {/* View Mode Toggle */}
                 <ToggleButtonGroup
                   value={viewMode}
                   exclusive
                   onChange={(_, mode) => mode && setViewMode(mode)}
-                  aria-label="view mode"
+                  size="small"
+                  sx={{
+                    '& .MuiToggleButton-root': {
+                      border: `1px solid ${alpha(theme.palette.divider, 0.3)}`,
+                      '&.Mui-selected': {
+                        backgroundColor: theme.palette.primary.main,
+                        color: 'white',
+                      },
+                    },
+                  }}
                 >
                   <ToggleButton value="grid" aria-label="grid view">
                     <ViewModule />
@@ -1202,21 +1570,28 @@ const CompaniesPage: React.FC = () => {
           </CardContent>
         </Card>
 
+        {/* Filters */}
+        <CompanyFilters
+          filters={filters}
+          setFilters={setFilters}
+          onClearFilters={handleClearFilters}
+        />
+
         {/* Companies Grid/List */}
         {currentCompanies.length === 0 ? (
           <Card sx={{ p: 8, textAlign: "center" }}>
             <Typography variant="h6" gutterBottom>
-              Không tìm thấy công ty phù hợp
+              No companies found
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Thử điều chỉnh bộ lọc hoặc từ khóa tìm kiếm
+              Try adjusting your filters or search terms
             </Typography>
             <Button
               variant="outlined"
               startIcon={<Refresh />}
               onClick={handleClearFilters}
             >
-              Xóa bộ lọc
+              Clear filters
             </Button>
           </Card>
         ) : (
@@ -1248,7 +1623,11 @@ const CompaniesPage: React.FC = () => {
                       viewMode={viewMode}
                       onCompanyClick={handleCompanyClick}
                       onBookmarkClick={handleBookmarkClick}
+                      onFollowClick={handleFollowClick}
+                      onShareClick={handleShareClick}
                       isBookmarked={bookmarkedCompanies.includes(company.id)}
+                      isFollowing={followingCompanies.includes(company.id)}
+                      showRealTimeStats={true}
                     />
                   </div>
                 </Fade>
@@ -1397,7 +1776,7 @@ const CompaniesPage: React.FC = () => {
                     </Typography>
                     <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
                       <Chip
-                        label={`${selectedCompany.totalJobs} việc làm`}
+                        label={`${selectedCompany.activeJobs} việc làm`}
                         color="primary"
                       />
                       {selectedCompany.isVerified && (
@@ -1409,6 +1788,9 @@ const CompaniesPage: React.FC = () => {
                       )}
                       {selectedCompany.isFeatured && (
                         <Chip label="Nổi bật" color="error" />
+                      )}
+                      {followingCompanies.includes(selectedCompany.id) && (
+                        <Chip label="Đang theo dõi" color="secondary" />
                       )}
                     </Box>
                   </Grid>
@@ -1444,6 +1826,27 @@ const CompaniesPage: React.FC = () => {
                     : "Lưu công ty"}
                 </Button>
                 <Button
+                  onClick={() => handleFollowClick(selectedCompany.id)}
+                  variant="outlined"
+                  startIcon={
+                    followingCompanies.includes(selectedCompany.id) ? (
+                      <Favorite />
+                    ) : (
+                      <FavoriteBorder />
+                    )
+                  }
+                  color={
+                    followingCompanies.includes(selectedCompany.id)
+                      ? "secondary"
+                      : "inherit"
+                  }
+                  sx={{ borderRadius: 2 }}
+                >
+                  {followingCompanies.includes(selectedCompany.id)
+                    ? "Đang theo dõi"
+                    : "Theo dõi công ty"}
+                </Button>
+                <Button
                   variant="contained"
                   startIcon={<Work />}
                   sx={{
@@ -1453,10 +1856,33 @@ const CompaniesPage: React.FC = () => {
                 >
                   Xem việc làm
                 </Button>
+                <Button
+                  variant="contained"
+                  startIcon={<Share />}
+                  onClick={() => handleShareClick(selectedCompany)}
+                  sx={{
+                    borderRadius: 2,
+                    background: `linear-gradient(135deg, ${theme.palette.info.main}, ${theme.palette.secondary.main})`,
+                  }}
+                >
+                  Chia sẻ
+                </Button>
               </DialogActions>
             </>
           )}
         </Dialog>
+
+        {/* Snackbar for notifications */}
+        <Snackbar
+          open={snackbarOpen}
+          autoHideDuration={6000}
+          onClose={() => setSnackbarOpen(false)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        >
+          <Alert onClose={() => setSnackbarOpen(false)} severity={snackbarSeverity} sx={{ width: '100%' }}>
+            {snackbarMessage}
+          </Alert>
+        </Snackbar>
       </Container>
     </Box>
   );
