@@ -22,6 +22,7 @@ import uploadRoutes from './routes/upload';
 import savedJobsRoutes from './routes/savedJobs';
 import analyticsRoutes from './routes/analytics';
 import studentDashboardRoutes from './routes/studentDashboard';
+import companyDashboardRoutes from './routes/companyDashboard';
 import notificationsRoutes from './routes/notifications';
 
 // Import middleware
@@ -225,6 +226,7 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/saved-jobs', savedJobsRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/student-dashboard', studentDashboardRoutes);
+app.use('/api/company-dashboard', companyDashboardRoutes);
 app.use('/api/notifications', notificationsRoutes);
 
 // Socket.IO instance available to routes

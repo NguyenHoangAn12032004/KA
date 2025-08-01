@@ -278,6 +278,19 @@ export const analyticsAPI = {
   }
 };
 
+// Company Dashboard API
+export const companyDashboardAPI = {
+  getStats: async () => {
+    return await api.get('/api/company-dashboard/stats');
+  },
+  getRecentApplications: async () => {
+    return await api.get('/api/company-dashboard/recent-applications');
+  },
+  getPerformanceMetrics: async () => {
+    return await api.get('/api/company-dashboard/performance');
+  }
+};
+
 // Jobs API
 export const jobsAPI = {
   getAll: async (filters?: any) => {

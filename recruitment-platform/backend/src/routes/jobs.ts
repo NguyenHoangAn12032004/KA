@@ -419,14 +419,20 @@ router.post('/:id/view', async (req: Request, res) => {
   try {
     const { id } = req.params;
     const userId = (req as AuthRequest).user?.id;
+    const ipAddress = req.ip || req.connection.remoteAddress || '0.0.0.0';
     const userAgent = req.headers['user-agent'];
-    const ipAddress = req.ip || req.socket.remoteAddress;
     
-    console.log(`Recording view for job ${id}, userId: ${userId || 'anonymous'}`);
-    
-    // Check if job exists
+    // Get the job to check if it exists and get company info
     const job = await prisma.job.findUnique({
-      where: { id }
+      where: { id },
+      include: {
+        company_profiles: true,
+        _count: {
+          select: {
+            applications: true
+          }
+        }
+      }
     });
     
     if (!job) {
@@ -436,34 +442,57 @@ router.post('/:id/view', async (req: Request, res) => {
       });
     }
     
-    // Record job view using JobView model
-    await prisma.jobView.create({
-      data: {
-        id: uuid(),
-        jobId: id,
-        userId: userId || undefined,
-        ipAddress: ipAddress || undefined,
-        userAgent: userAgent || undefined
+    // Record the job view
+    try {
+      await prisma.jobView.create({
+        data: {
+          id: uuid(),
+          jobId: id,
+          userId: userId || undefined,
+          ipAddress: ipAddress || undefined,
+          userAgent: userAgent || undefined  
+        }
+      });
+      
+      console.log(`📊 View recorded for job ${id}, user: ${userId || 'anonymous'}`);
+      
+      // Emit real-time update to company dashboard
+      const io = (req as any).io;
+      if (io && job.company_profiles) {
+        const updatedViewCount = await prisma.jobView.count({
+          where: { jobId: id }
+        });
+        
+        io.to(`company-${job.companyId}`).emit('job-viewed', {
+          jobId: id,
+          jobTitle: job.title,
+          totalViews: updatedViewCount,
+          viewedBy: userId || 'anonymous'
+        });
+        
+        console.log(`📡 Emitted job-viewed event to company-${job.companyId}`);
       }
-    });
+      
+    } catch (viewError) {
+      console.error('Error recording job view:', viewError);
+    }
     
-    console.log(`Successfully recorded view for job ${id}`);
-    
-    // Get updated view count
+    // Get the updated job with current counts
     const updatedJob = await prisma.job.findUnique({
       where: { id },
-      select: { 
-        viewCount: true,
-        applicationsCount: true
+      include: {
+        company_profiles: true,
+        _count: {
+          select: {
+            applications: true
+          }
+        }
       }
     });
     
     res.json({
       success: true,
-      data: {
-        viewCount: updatedJob?.viewCount || 0,
-        applicationsCount: updatedJob?.applicationsCount || 0
-      }
+      data: updatedJob || job
     });
   } catch (error) {
     console.error('Error recording job view:', error);

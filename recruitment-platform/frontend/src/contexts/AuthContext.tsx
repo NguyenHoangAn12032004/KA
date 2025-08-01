@@ -70,8 +70,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       setUser(userData);
       
-      // Verify token validity
-      verifyToken();
+      // Verify token validity after a small delay to avoid immediate logout on refresh
+      setTimeout(() => {
+        verifyToken();
+      }, 1000);
     }
     setLoading(false);
   }, []);
@@ -95,10 +97,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.warn('⚠️ Token verification failed, logging out');
         logout();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Token verification error:', error);
-      // If token is invalid, logout
-      logout();
+      // Only logout if it's a clear authentication error (401, 403)
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        console.warn('🔒 Token is invalid or expired, logging out');
+        logout();
+      } else {
+        console.warn('🌐 Network or server error, keeping user logged in');
+        // Keep the user logged in for network errors
+      }
     }
   };
 

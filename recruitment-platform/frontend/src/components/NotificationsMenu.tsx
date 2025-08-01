@@ -47,7 +47,11 @@ const NotificationsMenu: React.FC = () => {
 
   useEffect(() => {
     // Tính số thông báo chưa đọc
-    setUnreadCount(notifications.filter(notification => !notification.isRead).length);
+    if (Array.isArray(notifications)) {
+      setUnreadCount(notifications.filter(notification => !notification.isRead).length);
+    } else {
+      setUnreadCount(0);
+    }
   }, [notifications]);
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
@@ -66,7 +70,9 @@ const NotificationsMenu: React.FC = () => {
       // Nếu API chưa được triển khai, sử dụng dữ liệu mẫu
       try {
         const response = await notificationsAPI.getAll({ unread_only: false, page: 1 });
-        setNotifications(response.data || []);
+        // Handle different response structures
+        const notificationsData = (response as any).notifications || response.data || (response as any) || [];
+        setNotifications(Array.isArray(notificationsData) ? notificationsData : []);
       } catch (error) {
         console.error("Error loading notifications:", error);
         // Sử dụng dữ liệu mẫu nếu API lỗi
@@ -116,11 +122,12 @@ const NotificationsMenu: React.FC = () => {
   const markAsRead = async (id: string) => {
     try {
       await notificationsAPI.markRead(id);
-      setNotifications(prevNotifications => 
-        prevNotifications.map(notification => 
+      setNotifications(prevNotifications => {
+        if (!Array.isArray(prevNotifications)) return prevNotifications;
+        return prevNotifications.map(notification => 
           notification.id === id ? { ...notification, isRead: true } : notification
-        )
-      );
+        );
+      });
     } catch (error) {
       console.error("Error marking notification as read:", error);
     }
@@ -129,9 +136,10 @@ const NotificationsMenu: React.FC = () => {
   const markAllRead = async () => {
     try {
       await notificationsAPI.markAllRead();
-      setNotifications(prevNotifications => 
-        prevNotifications.map(notification => ({ ...notification, isRead: true }))
-      );
+      setNotifications(prevNotifications => {
+        if (!Array.isArray(prevNotifications)) return prevNotifications;
+        return prevNotifications.map(notification => ({ ...notification, isRead: true }));
+      });
     } catch (error) {
       console.error("Error marking all notifications as read:", error);
     }
@@ -241,7 +249,7 @@ const NotificationsMenu: React.FC = () => {
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
             <CircularProgress size={30} />
           </Box>
-        ) : notifications.length === 0 ? (
+        ) : !Array.isArray(notifications) || notifications.length === 0 ? (
           <Box sx={{ p: 3, textAlign: 'center' }}>
             <Typography variant="body1" color="text.secondary">Không có thông báo nào</Typography>
           </Box>

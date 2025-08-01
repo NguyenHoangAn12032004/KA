@@ -86,9 +86,9 @@ import {
   School,
 } from "@mui/icons-material";
 import { useAuth } from "../contexts/AuthContext";
-import { jobsAPI, companiesAPI } from "../services/api";
+import { jobsAPI, applicationsAPI, companyDashboardAPI } from '../services/api';
 import { toast } from "react-toastify";
-import socketService from "../services/socketService";
+import socketService from '../services/socketService';
 import QuickActions from "./QuickActions";
 import { useNavigate } from "react-router-dom";
 
@@ -321,7 +321,7 @@ const CompanyStatCard: React.FC<{
 };
 
 // Recent Applications Component
-const RecentApplications: React.FC = () => {
+const RecentApplications: React.FC<{ refreshTrigger: number }> = ({ refreshTrigger }) => {
   const theme = useTheme();
   const { user } = useAuth();
   const [applications, setApplications] = useState<any[]>([]);
@@ -332,22 +332,12 @@ const RecentApplications: React.FC = () => {
   const fetchRecentApplications = async () => {
     try {
       setLoading(true);
-      const response = await companiesAPI.getRecentApplications();
+      const response = await companyDashboardAPI.getRecentApplications();
       
-      if (response?.data?.data) {
-        // Transform data to include basic candidate info
-        const transformedData = response.data.data.slice(0, 5).map((app: any) => ({
-          id: app.id,
-          candidateName: `${app.student?.firstName || ''} ${app.student?.lastName || ''}`.trim() || 'Ứng viên',
-          candidateAvatar: app.student?.avatar || null,
-          jobTitle: app.job?.title || 'Vị trí tuyển dụng',
-          appliedAt: new Date(app.createdAt).toLocaleString('vi-VN'),
-          status: app.status,
-          avatar: app.student?.firstName?.charAt(0)?.toUpperCase() || 'U',
-        }));
-        setApplications(transformedData);
-      } else if (Array.isArray(response?.data)) {
-        setApplications(response.data.slice(0, 5));
+      if (response?.data?.success && response.data.data) {
+        // Giới hạn chỉ lấy 3 ứng viên mới nhất
+        setApplications(response.data.data.slice(0, 3));
+        console.log('✅ Đã tải 3 ứng viên gần đây:', response.data.data.slice(0, 3));
       } else {
         console.warn('Không có dữ liệu ứng viên hoặc định dạng không đúng:', response);
         setApplications([]);
@@ -360,81 +350,14 @@ const RecentApplications: React.FC = () => {
     }
   };
 
-  // Setup realtime updates
+  // Gọi API khi component mount hoặc khi có refreshTrigger
   useEffect(() => {
-    console.log('🚀 CompanyDashboard Socket useEffect STARTED');
-    console.log('🚀 User role:', user?.role, 'CompanyId:', user?.companyId);
-    
-    // Initial fetch
     fetchRecentApplications();
+  }, [refreshTrigger]);
 
-    // Setup socket connection for realtime updates
-    if (user?.role === 'COMPANY' && user?.companyId) {
-      console.log('🚀 Setting up socket for company user');
-      try {
-        const token = localStorage.getItem('token');
-        if (token) {
-          console.log('🔌 Setting up socket connection for company:', user.companyId);
-          socketService.connect(token);
-          
-          // Join company room immediately after connection setup
-          const companyId = user.companyId;
-          if (companyId) {
-            console.log('🏢 Requesting to join company room immediately:', companyId);
-            socketService.joinCompanyRoom(companyId);
-          }
-        
-          // Listen for new applications
-          socketService.on('new-application', (applicationData: any) => {
-            console.log('🔔 New application received:', applicationData);
-            
-            // Add new application to the list
-            const newApp = {
-              id: applicationData.id,
-              candidateName: `${applicationData.student?.firstName || ''} ${applicationData.student?.lastName || ''}`.trim() || 'Ứng viên',
-              candidateAvatar: applicationData.student?.avatar || null,
-              jobTitle: applicationData.job?.title || 'Vị trí tuyển dụng',
-              appliedAt: new Date(applicationData.createdAt).toLocaleString('vi-VN'),
-              status: applicationData.status,
-              avatar: applicationData.student?.firstName?.charAt(0)?.toUpperCase() || 'U',
-            };
-            
-            setApplications(prev => [newApp, ...prev.slice(0, 4)]);
-            
-            // Show notification
-            toast.success(`Có ứng viên mới ứng tuyển vào vị trí ${applicationData.job?.title}`);
-          });
-
-          // Listen for application status updates
-          socketService.on('applicationStatusUpdate', (updateData: any) => {
-            console.log('📝 Application status updated:', updateData);
-            
-            setApplications(prev => 
-              prev.map(app => 
-                app.id === updateData.applicationId 
-                  ? { ...app, status: updateData.status }
-                  : app
-              )
-            );
-          });
-        }
-      } catch (error) {
-        console.error('Socket connection error:', error);
-      }
-    }
-
-    // Cleanup
-    return () => {
-      console.log('🧹 Cleaning up socket listeners');
-      if (socketService) {
-        socketService.off('new-application');
-        socketService.off('applicationStatusUpdate');
-      }
-    };
-  }, [user?.companyId]); // Only depend on companyId to prevent unnecessary reconnections
-
-  // DEBUG: Add console log to see if useEffect runs
-  console.log('🔄 CompanyDashboard useEffect (socket) - User:', user ? `${user.email} (${user.role})` : 'null', 'CompanyId:', user?.companyId);
+  const handleViewMoreCandidates = () => {
+    navigate('/candidates');
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -464,10 +387,6 @@ const RecentApplications: React.FC = () => {
       default:
         return status;
     }
-  };
-
-  const handleViewMoreCandidates = () => {
-    navigate('/candidates');
   };
 
   return (
@@ -643,13 +562,11 @@ const PerformanceMetrics: React.FC = () => {
     const fetchPerformanceMetrics = async () => {
       try {
         setLoading(true);
-        const response = await companiesAPI.getPerformanceMetrics();
-        if (response?.data?.data?.performanceMetrics) {
-          setMetrics(response.data.data.performanceMetrics);
-        } else if (response?.data?.performanceMetrics) {
-          setMetrics(response.data.performanceMetrics);
+        const response = await companyDashboardAPI.getPerformanceMetrics();
+        if (response?.data?.success && response.data.data) {
+          setMetrics(response.data.data);
+          console.log('✅ Đã tải performance metrics:', response.data.data);
         }
-        // Giữ nguyên metrics mặc định nếu API lỗi
       } catch (error) {
         console.error("Error loading performance metrics:", error);
         // Không hiển thị toast để tránh quá nhiều thông báo
@@ -768,14 +685,104 @@ const CompanyDashboard: React.FC = () => {
     activeJobs: 0,
     totalApplications: 0,
     totalViews: 0,
-    interviewsScheduled: 0
+    interviewsScheduled: 0,
+    weeklyTrends: {
+      newApplications: 0,
+      newViews: 0,
+    }
   });
   const [dataError, setDataError] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   useEffect(() => {
     loadCompanyData();
-  }, [refreshTrigger]);
+  }, [refreshTrigger, user]);
+
+  // Setup realtime updates
+  useEffect(() => {
+    console.log('🚀 CompanyDashboard Socket useEffect STARTED');
+    console.log('🚀 User role:', user?.role, 'CompanyId:', user?.companyId);
+
+    // Setup socket connection for realtime updates
+    if (user?.role === 'COMPANY' && user?.companyId) {
+      console.log('🚀 Setting up socket for company user');
+      try {
+        const token = localStorage.getItem('token');
+        if (token) {
+          console.log('🔌 Setting up socket connection for company:', user.companyId);
+          socketService.connect(token);
+          
+          // Join company room immediately after connection setup
+          const companyId = user.companyId;
+          if (companyId) {
+            console.log('🏢 Requesting to join company room immediately:', companyId);
+            socketService.joinCompanyRoom(companyId);
+          }
+        
+          // Listen for new applications
+          socketService.on('new-application', (applicationData: any) => {
+            console.log('🔔 New application received:', applicationData);
+            
+            // Update stats incrementally for MUI Grid cards
+            setCompanyStats((prev: any) => ({
+              ...prev,
+              totalApplications: prev.totalApplications + 1,
+              weeklyTrends: {
+                ...prev.weeklyTrends,
+                newApplications: prev.weeklyTrends.newApplications + 1
+              }
+            }));
+            
+            // Trigger refresh of recent applications
+            setRefreshTrigger(prev => prev + 1);
+            
+            // Show notification
+            toast.success(`Có ứng viên mới ứng tuyển vào vị trí ${applicationData.job?.title}`);
+          });
+
+          // Listen for application status updates
+          socketService.on('applicationStatusUpdate', (updateData: any) => {
+            console.log('📝 Application status updated:', updateData);
+            // Application status updates will be handled by individual components
+          });
+
+          // Listen for job view events
+          socketService.on('job-viewed', (data: any) => {
+            console.log('👁️ Job viewed:', data);
+            
+            // Update view count in jobs list
+            setJobs((prev: any) => prev.map((job: any) => 
+              job.id === data.jobId 
+                ? { ...job, viewsCount: (job.viewsCount || 0) + 1 }
+                : job
+            ));
+            
+            // Update total views in stats incrementally for MUI Grid cards
+            setCompanyStats((prev: any) => ({
+              ...prev,
+              totalViews: prev.totalViews + 1,
+              weeklyTrends: {
+                ...prev.weeklyTrends,
+                newViews: prev.weeklyTrends.newViews + 1
+              }
+            }));
+          });
+        }
+      } catch (error) {
+        console.error('Socket connection error:', error);
+      }
+    }
+
+    // Cleanup
+    return () => {
+      console.log('🧹 Cleaning up socket listeners');
+      if (socketService) {
+        socketService.off('new-application');
+        socketService.off('applicationStatusUpdate');
+        socketService.off('job-viewed');
+      }
+    };
+  }, [user?.companyId]); // Only depend on companyId to prevent unnecessary reconnections
 
   // Sửa phần loadCompanyData để xử lý dữ liệu tốt hơn
   const loadCompanyData = async () => {
@@ -788,10 +795,13 @@ const CompanyDashboard: React.FC = () => {
       console.log('👤 User:', JSON.stringify(user, null, 2));
       
       // Tải song song dữ liệu công việc và thống kê
-      const jobsResponse = await jobsAPI.getCompanyJobs();
+      const [jobsResponse, statsResponse] = await Promise.all([
+        jobsAPI.getCompanyJobs(),
+        companyDashboardAPI.getStats()
+      ]);
       
       // Kiểm tra và xử lý dữ liệu công việc
-      console.log('📋 API Response:', JSON.stringify(jobsResponse, null, 2));
+      console.log('📋 Jobs API Response:', JSON.stringify(jobsResponse, null, 2));
       
       if (jobsResponse?.data?.data) {
         console.log(`📊 Đã tải ${jobsResponse.data.data.length} công việc từ API`);
@@ -806,8 +816,13 @@ const CompanyDashboard: React.FC = () => {
         console.warn('⚠️ Không có dữ liệu công việc hoặc định dạng không đúng:', jobsResponse.data);
         setJobs([]);
       }
-      
-      // Thống kê sẽ được tải riêng trong component PerformanceMetrics
+
+      // Xử lý dữ liệu thống kê
+      console.log('📈 Stats API Response:', JSON.stringify(statsResponse, null, 2));
+      if (statsResponse?.data?.success && statsResponse.data.data) {
+        setCompanyStats(statsResponse.data.data);
+        console.log('✅ Đã cập nhật thống kê công ty:', statsResponse.data.data);
+      }
       
     } catch (error: any) {
       console.error('❌ Lỗi khi tải dữ liệu công ty:', error);
@@ -1303,7 +1318,7 @@ const CompanyDashboard: React.FC = () => {
               gradient={`${theme.palette.info.main}, ${theme.palette.info.dark}`}
               delay={100}
               trend="up"
-              trendValue="+24 hôm nay"
+              trendValue={`+${companyStats.weeklyTrends?.newApplications || 0} tuần này`}
             />
           </Grid>
           <Grid item xs={12} sm={6} md={3}>
@@ -1315,7 +1330,7 @@ const CompanyDashboard: React.FC = () => {
               gradient={`${theme.palette.warning.main}, ${theme.palette.warning.dark}`}
               delay={200}
               trend="up"
-              trendValue="+15%"
+              trendValue={`+${companyStats.weeklyTrends?.newViews || 0} tuần này`}
             />
           </Grid>
           <Grid item xs={12} sm={6} md={3}>
@@ -1338,7 +1353,7 @@ const CompanyDashboard: React.FC = () => {
             <QuickActions userRole="COMPANY" />
           </Grid>
           <Grid item xs={12} md={4}>
-            <RecentApplications />
+            <RecentApplications refreshTrigger={refreshTrigger} />
           </Grid>
           <Grid item xs={12} md={4}>
             <PerformanceMetrics />
