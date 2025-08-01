@@ -322,6 +322,11 @@ const ModernJobsPage: React.FC = () => {
       return;
     }
 
+    if (user.role !== 'STUDENT') {
+      toast.error('Chỉ sinh viên mới có thể ứng tuyển vào vị trí này');
+      return;
+    }
+
     setSelectedJob(job);
     setOpenApplication(true);
   }, [user, t]);
@@ -896,30 +901,32 @@ const ModernJobsPage: React.FC = () => {
                               </Tooltip>
                             )}
                           </Stack>
-                          <Button
-                            variant={job.hasApplied ? "contained" : "contained"}
-                            color={job.hasApplied ? "success" : "primary"}
-                            size="small"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (!job.hasApplied) {
-                                handleApplyJob(job);
-                              }
-                            }}
-                            disabled={job.hasApplied}
-                            startIcon={job.hasApplied ? <CheckCircle /> : <Send />}
-                            sx={{
-                              backgroundColor: job.hasApplied ? '#4caf50' : undefined,
-                              color: 'white',
-                              '&.Mui-disabled': {
-                                backgroundColor: '#4caf50',
+                          {user && user.role === 'STUDENT' && (
+                            <Button
+                              variant={job.hasApplied ? "contained" : "contained"}
+                              color={job.hasApplied ? "success" : "primary"}
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (!job.hasApplied) {
+                                  handleApplyJob(job);
+                                }
+                              }}
+                              disabled={job.hasApplied}
+                              startIcon={job.hasApplied ? <CheckCircle /> : <Send />}
+                              sx={{
+                                backgroundColor: job.hasApplied ? '#4caf50' : undefined,
                                 color: 'white',
-                                opacity: 1
-                              }
-                            }}
-                          >
-                            {job.hasApplied ? t('jobs.applied') : t('jobs.apply')}
-                          </Button>
+                                '&.Mui-disabled': {
+                                  backgroundColor: '#4caf50',
+                                  color: 'white',
+                                  opacity: 1
+                                }
+                              }}
+                            >
+                              {job.hasApplied ? t('jobs.applied') : t('jobs.apply')}
+                            </Button>
+                          )}
                         </Stack>
                       </Stack>
                     </CardContent>

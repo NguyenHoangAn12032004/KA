@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from '../contexts/LanguageContext';
+import { useAuth } from '../contexts/AuthContext';
 import {
   Box, Typography, Card, CardContent, Button, TextField, InputAdornment, Grid, Chip, Avatar, 
   CircularProgress, Pagination, useTheme, Fade, Stack, Skeleton, IconButton, Container,
@@ -61,6 +62,7 @@ const JobsPage: React.FC = () => {
   // Theme and translations
   const theme = useTheme();
   const { t } = useTranslation();
+  const { user } = useAuth();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
   
@@ -312,8 +314,24 @@ const JobsPage: React.FC = () => {
     []
   );
 
+  // Check if user can apply to jobs
+  const canApplyToJobs = (): boolean => {
+    return Boolean(user && user.role === 'STUDENT');
+  };
+
   // Handle job application
   const handleApplyJob = (job: any) => {
+    // Check if user can apply (only STUDENT role can apply)
+    if (!user) {
+      toast.error('Vui lòng đăng nhập để ứng tuyển');
+      return;
+    }
+    
+    if (user.role !== 'STUDENT') {
+      toast.error('Chỉ sinh viên mới có thể ứng tuyển vào vị trí này');
+      return;
+    }
+    
     // Open job details with application focus
     setSelectedJob(job);
     setOpenJobDetails(true);
@@ -811,6 +829,7 @@ const JobsPage: React.FC = () => {
                       onSaveClick={handleSaveJob}
                       onMenuClick={handleMenuClick}
                       viewMode={viewMode}
+                      showApplyButton={canApplyToJobs()} // Only show apply button for students
                     />
                   </Box>
                 </Grow>

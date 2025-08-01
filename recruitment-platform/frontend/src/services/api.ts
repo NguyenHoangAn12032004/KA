@@ -13,12 +13,39 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
+    console.log(`🚀 [AXIOS REQUEST] ${config.method?.toUpperCase()} ${config.url}`, {
+      headers: config.headers,
+      data: config.data,
+      token: token ? token.substring(0, 20) + '...' : 'null'
+    });
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
   (error) => {
+    console.error('🚨 [AXIOS REQUEST ERROR]', error);
+    return Promise.reject(error);
+  }
+);
+
+// Add response interceptor for debugging
+api.interceptors.response.use(
+  (response) => {
+    console.log(`✅ [AXIOS RESPONSE] ${response.config.method?.toUpperCase()} ${response.config.url}`, {
+      status: response.status,
+      data: response.data,
+      headers: Object.fromEntries(Object.entries(response.headers))
+    });
+    return response;
+  },
+  (error) => {
+    console.error(`❌ [AXIOS RESPONSE ERROR] ${error.config?.method?.toUpperCase()} ${error.config?.url}`, {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      message: error.message
+    });
     return Promise.reject(error);
   }
 );
@@ -412,10 +439,16 @@ export const applicationsAPI = {
     return await api.get('/api/applications/company/recent');
   },
   updateStatus: async (id: string, status: string) => {
-    return await api.patch(`/api/applications/${id}/status`, { status });
+    console.log(`📡 [API DEBUG] updateStatus called with:`, { id, status });
+    const result = await api.patch(`/api/applications/${id}/status`, { status });
+    console.log(`📡 [API DEBUG] updateStatus result:`, result);
+    return result;
   },
   scheduleInterview: async (id: string, interviewData: any) => {
-    return await api.post(`/api/applications/${id}/schedule-interview`, interviewData);
+    console.log(`📡 [API DEBUG] scheduleInterview called with:`, { id, interviewData });  
+    const result = await api.post(`/api/applications/${id}/schedule-interview`, interviewData);
+    console.log(`📡 [API DEBUG] scheduleInterview result:`, result);
+    return result;
   },
   uploadResume: async (applicationId: string, file: File) => {
     const formData = new FormData();

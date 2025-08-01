@@ -22,6 +22,7 @@ import uploadRoutes from './routes/upload';
 import savedJobsRoutes from './routes/savedJobs';
 import analyticsRoutes from './routes/analytics';
 import studentDashboardRoutes from './routes/studentDashboard';
+import notificationsRoutes from './routes/notifications';
 
 // Import middleware
 import { errorHandler } from './middleware/errorHandler';
@@ -87,15 +88,19 @@ app.use(helmet({
   },
 }));
 
-// Rate limiting
+// Rate limiting - More permissive for development
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX || '500'), // tăng giới hạn từ 100 lên 500 requests per windowMs
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000'), // 1 minute instead of 15
+  max: parseInt(process.env.RATE_LIMIT_MAX || '1000'), // 1000 requests per minute for development
   message: {
     error: 'Too many requests from this IP, please try again later.'
   },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting for development environment
+    return process.env.NODE_ENV === 'development';
+  }
 });
 
 app.use('/api/', limiter);
@@ -220,6 +225,7 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/saved-jobs', savedJobsRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/student-dashboard', studentDashboardRoutes);
+app.use('/api/notifications', notificationsRoutes);
 
 // Socket.IO instance available to routes
 app.set('io', io);

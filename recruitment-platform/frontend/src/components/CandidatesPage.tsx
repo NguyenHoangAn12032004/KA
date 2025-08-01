@@ -70,6 +70,7 @@ import { debounce } from 'lodash';
 import { motion, AnimatePresence, Variants, TargetAndTransition } from 'framer-motion';
 import { styled } from '@mui/material/styles';
 import { useInView } from 'react-intersection-observer';
+import InterviewScheduleDialog from './InterviewScheduleDialog';
 
 interface Candidate {
   id: string;
@@ -80,6 +81,7 @@ interface Candidate {
   appliedAt: string;
   updatedAt: string;
   student: {
+    id: string;
     firstName: string;
     lastName: string;
     email: string;
@@ -267,6 +269,8 @@ const CandidatesPage: React.FC = () => {
   const [tabValue, setTabValue] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [notification, setNotification] = useState<{type: 'success' | 'info' | 'warning' | 'error', message: string} | null>(null);
+  const [interviewDialogOpen, setInterviewDialogOpen] = useState(false);
+  const [schedulingInterview, setSchedulingInterview] = useState(false);
   const itemsPerPage = 10;
 
   const [jobsList, setJobsList] = useState<{id: string, title: string}[]>([]);
@@ -389,6 +393,10 @@ const CandidatesPage: React.FC = () => {
       const candidatesData = response.data?.data || [];
       
       if (Array.isArray(candidatesData)) {
+        // Debug: Log first candidate to check structure
+        if (candidatesData.length > 0) {
+          console.log('🔍 First candidate structure:', candidatesData[0]);
+        }
         setCandidates(candidatesData);
         
         // Lấy danh sách job duy nhất
@@ -433,7 +441,12 @@ const CandidatesPage: React.FC = () => {
     if (!selectedCandidate) return;
     
     try {
-      await applicationsAPI.update(selectedCandidate.id, { status });
+      console.log(`🔄 [DEBUG] Updating status to ${status} for application ${selectedCandidate.id}`);
+      console.log(`🔄 [DEBUG] Token exists:`, !!localStorage.getItem('token'));
+      console.log(`🔄 [DEBUG] Token value (first 20 chars):`, localStorage.getItem('token')?.substring(0, 20));
+      
+      const response = await applicationsAPI.updateStatus(selectedCandidate.id, status);
+      console.log('✅ [DEBUG] Status update response:', response);
       
       // Emit socket event for real-time update
       socketService.emit('application-status-update', {
@@ -442,6 +455,7 @@ const CandidatesPage: React.FC = () => {
         studentId: selectedCandidate.studentId
       });
       
+      // Update local state immediately for better UX
       setCandidates(prev => prev.map(c => 
         c.id === selectedCandidate.id ? { ...c, status } : c
       ));
@@ -450,11 +464,20 @@ const CandidatesPage: React.FC = () => {
         type: 'success',
         message: `Đã cập nhật trạng thái ứng viên thành ${getStatusLabel(status)}`
       });
-    } catch (error) {
-      console.error("Error updating candidate status:", error);
+      
+      // Reload data to ensure consistency
+      setTimeout(() => {
+        loadCandidates();
+      }, 1000);
+      
+    } catch (error: any) {
+      console.error("❌ Error updating candidate status:", error);
+      
+      // Show detailed error message
+      const errorMessage = error?.response?.data?.error || error?.message || 'Không thể cập nhật trạng thái ứng viên';
       setNotification({
         type: 'error',
-        message: 'Không thể cập nhật trạng thái ứng viên'
+        message: errorMessage
       });
     } finally {
       handleMenuClose();
@@ -463,9 +486,133 @@ const CandidatesPage: React.FC = () => {
 
   const handleViewProfile = () => {
     if (!selectedCandidate) return;
+    
+    // Debug: Log selected candidate data
+    console.log('🔍 Selected candidate for profile view:', selectedCandidate);
+    console.log('🔍 Student ID:', selectedCandidate.studentId);
+    console.log('🔍 Student object:', selectedCandidate.student);
+    
+    // Get the actual student ID from the student object
+    const studentId = selectedCandidate.student?.id || selectedCandidate.studentId || selectedCandidate.id;
+    
+    if (!studentId) {
+      console.error('❌ No valid student ID found');
+      setNotification({
+        type: 'error',
+        message: 'Không tìm thấy ID ứng viên hợp lệ'
+      });
+      handleMenuClose();
+      return;
+    }
+    
+    console.log('✅ Navigating to profile with ID:', studentId);
     // Navigate to candidate profile
-    navigate(`/candidates/${selectedCandidate.studentId}`);
+    navigate(`/candidates/${studentId}`);
     handleMenuClose();
+  };
+
+  const handleScheduleInterview = () => {
+    console.log('📅 [DEBUG] Schedule interview clicked, selectedCandidate:', selectedCandidate);
+    if (!selectedCandidate) return;
+    
+    setInterviewDialogOpen(true);
+    // Close menu nhưng không reset selectedCandidate
+    setAnchorEl(null);
+  };
+
+  const handleCloseInterviewDialog = () => {
+    setInterviewDialogOpen(false);
+    setSelectedCandidate(null);
+  };
+
+  // TEST FUNCTION - Add to window for console testing
+  React.useEffect(() => {
+    (window as any).testScheduleInterview = async () => {
+      console.log('🧪 [TEST] Testing schedule interview API call...');
+      const testData = {
+        title: 'Test Interview',
+        type: 'VIDEO',
+        scheduledAt: new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 hours from now
+        duration: 60,
+        meetingLink: 'https://meet.google.com/test',
+        interviewer: 'Test Interviewer',
+        interviewerEmail: 'test@company.com',
+        notes: 'Test interview'
+      };
+      
+      try {
+        const result = await applicationsAPI.scheduleInterview('703efede-86df-452b-8cd2-273681aa5270', testData);
+        console.log('🧪 [TEST] Success:', result);
+      } catch (error) {
+        console.error('🧪 [TEST] Error:', error);
+      }
+    };
+
+    (window as any).testStatusUpdate = async () => {
+      console.log('🧪 [TEST] Testing status update API call...');
+      try {
+        const result = await applicationsAPI.updateStatus('703efede-86df-452b-8cd2-273681aa5270', 'INTERVIEW_SCHEDULED');
+        console.log('🧪 [TEST] Success:', result);
+      } catch (error) {
+        console.error('🧪 [TEST] Error:', error);
+      }
+    };
+  }, []);
+
+  const handleInterviewScheduled = async (interviewData: any) => {
+    console.log('🎯 [DEBUG] handleInterviewScheduled called with:', interviewData);
+    if (!selectedCandidate) {
+      console.log('❌ [DEBUG] No selected candidate, returning');
+      return;
+    }
+    
+    try {
+      setSchedulingInterview(true);
+      console.log('📅 [DEBUG] Scheduling interview with data:', interviewData);
+      console.log('📅 [DEBUG] Selected candidate:', selectedCandidate.id);
+      console.log('📅 [DEBUG] Token exists:', !!localStorage.getItem('token'));
+      
+      // Call API to schedule interview (this will also update status to INTERVIEW_SCHEDULED)  
+      const response = await applicationsAPI.scheduleInterview(selectedCandidate.id, interviewData);
+      console.log('✅ [DEBUG] Interview scheduled successfully:', response);
+      
+      // Update local state immediately
+      setCandidates(prev => prev.map(c => 
+        c.id === selectedCandidate.id ? { ...c, status: 'INTERVIEW_SCHEDULED' } : c
+      ));
+      
+      setNotification({
+        type: 'success',
+        message: `Đã lên lịch phỏng vấn cho ${selectedCandidate.student.firstName} ${selectedCandidate.student.lastName}`
+      });
+      
+      // Emit socket event for real-time update
+      socketService.emit('interview-scheduled', {
+        applicationId: selectedCandidate.id,
+        studentId: selectedCandidate.studentId,
+        interviewData
+      });
+      
+      // Close dialog and reset selectedCandidate
+      handleCloseInterviewDialog();
+      
+      // Reload data to ensure consistency
+      setTimeout(() => {
+        loadCandidates();
+      }, 1000);
+      
+    } catch (error: any) {
+      console.error('❌ Error scheduling interview:', error);
+      
+      // Show detailed error message
+      const errorMessage = error?.response?.data?.error || error?.message || 'Không thể lên lịch phỏng vấn';
+      setNotification({
+        type: 'error',
+        message: errorMessage
+      });
+    } finally {
+      setSchedulingInterview(false);
+    }
   };
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
@@ -947,6 +1094,12 @@ const CandidatesPage: React.FC = () => {
             </ListItemIcon>
             <ListItemText>Xem hồ sơ</ListItemText>
           </MenuItem>
+          <MenuItem onClick={handleScheduleInterview}>
+            <ListItemIcon>
+              <Schedule fontSize="small" color="primary" />
+            </ListItemIcon>
+            <ListItemText>Lên lịch phỏng vấn</ListItemText>
+          </MenuItem>
           <Divider />
           <MenuItem onClick={() => handleStatusChange('PENDING')}>
             <ListItemIcon>
@@ -1018,6 +1171,16 @@ const CandidatesPage: React.FC = () => {
           `}
         </style>
       </Paper>
+
+      {/* Interview Schedule Dialog */}
+      <InterviewScheduleDialog
+        open={interviewDialogOpen}
+        onClose={handleCloseInterviewDialog}
+        onSchedule={handleInterviewScheduled}
+        candidateName={selectedCandidate ? `${selectedCandidate.student.firstName} ${selectedCandidate.student.lastName}` : ''}
+        jobTitle={selectedCandidate?.jobTitle || ''}
+        loading={schedulingInterview}
+      />
     </Container>
   );
 };

@@ -58,7 +58,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     if (storedToken && storedUser) {
       setToken(storedToken);
-      setUser(JSON.parse(storedUser));
+      const userData = JSON.parse(storedUser);
+      
+      // Extract companyId from company_profiles if it exists
+      if (userData.company_profiles && userData.company_profiles.id && !userData.companyId) {
+        userData.companyId = userData.company_profiles.id;
+        console.log('🏢 Added companyId to stored user data:', userData.companyId);
+        // Update localStorage with the corrected data
+        localStorage.setItem('user', JSON.stringify(userData));
+      }
+      
+      setUser(userData);
       
       // Verify token validity
       verifyToken();
@@ -73,8 +83,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const response = await authAPI.getCurrentUser();
       if (response.data?.success) {
         console.log('✅ Token is valid, user data:', response.data.data);
+        // Extract companyId from company_profiles if it exists
+        const userData = response.data.data;
+        if (userData.company_profiles && userData.company_profiles.id && !userData.companyId) {
+          userData.companyId = userData.company_profiles.id;
+          console.log('🏢 Added companyId to user data:', userData.companyId);
+        }
         // Update user data if needed
-        updateUser(response.data.data);
+        updateUser(userData);
       } else {
         console.warn('⚠️ Token verification failed, logging out');
         logout();
@@ -110,6 +126,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         
         console.log('🔑 Token received');
         console.log('👤 User data received:', user);
+        
+        // Extract companyId from company_profiles if it exists
+        if (user.company_profiles && user.company_profiles.id && !user.companyId) {
+          user.companyId = user.company_profiles.id;
+          console.log('🏢 Added companyId to user:', user.companyId);
+        }
         
         // Set state and localStorage
         setToken(token);
@@ -181,8 +203,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const response = await authAPI.getCurrentUser();
       if (response.data?.success) {
         console.log('✅ User data refreshed:', response.data);
-        setUser(response.data.data);
-        localStorage.setItem('user', JSON.stringify(response.data.data));
+        const userData = response.data.data;
+        // Extract companyId from company_profiles if it exists
+        if (userData.company_profiles && userData.company_profiles.id && !userData.companyId) {
+          userData.companyId = userData.company_profiles.id;
+          console.log('🏢 Added companyId to refreshed user data:', userData.companyId);
+        }
+        setUser(userData);
+        localStorage.setItem('user', JSON.stringify(userData));
       }
     } catch (error) {
       console.error('Failed to refresh user data:', error);

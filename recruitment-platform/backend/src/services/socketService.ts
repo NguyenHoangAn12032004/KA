@@ -15,6 +15,7 @@ export const initializeSocket = (io: Server) => {
     socket.on('join-company-room', (companyId: string) => {
       socket.join(`company-${companyId}`);
       logger.info(`🏢 Company ${companyId} joined room: company-${companyId}`);
+      logger.info(`📊 Socket ${socket.id} is now in rooms: ${Array.from(socket.rooms)}`);
     });
 
     // Join all companies room for general updates

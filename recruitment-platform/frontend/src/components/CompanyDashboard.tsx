@@ -88,6 +88,7 @@ import {
 import { useAuth } from "../contexts/AuthContext";
 import { jobsAPI, companiesAPI } from "../services/api";
 import { toast } from "react-toastify";
+import socketService from "../services/socketService";
 import QuickActions from "./QuickActions";
 import { useNavigate } from "react-router-dom";
 
@@ -322,81 +323,118 @@ const CompanyStatCard: React.FC<{
 // Recent Applications Component
 const RecentApplications: React.FC = () => {
   const theme = useTheme();
+  const { user } = useAuth();
   const [applications, setApplications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   
-  // Sửa phần fetchRecentApplications để thêm debounce và xử lý lỗi tốt hơn
+  // Fetch recent applications from API
+  const fetchRecentApplications = async () => {
+    try {
+      setLoading(true);
+      const response = await companiesAPI.getRecentApplications();
+      
+      if (response?.data?.data) {
+        // Transform data to include basic candidate info
+        const transformedData = response.data.data.slice(0, 5).map((app: any) => ({
+          id: app.id,
+          candidateName: `${app.student?.firstName || ''} ${app.student?.lastName || ''}`.trim() || 'Ứng viên',
+          candidateAvatar: app.student?.avatar || null,
+          jobTitle: app.job?.title || 'Vị trí tuyển dụng',
+          appliedAt: new Date(app.createdAt).toLocaleString('vi-VN'),
+          status: app.status,
+          avatar: app.student?.firstName?.charAt(0)?.toUpperCase() || 'U',
+        }));
+        setApplications(transformedData);
+      } else if (Array.isArray(response?.data)) {
+        setApplications(response.data.slice(0, 5));
+      } else {
+        console.warn('Không có dữ liệu ứng viên hoặc định dạng không đúng:', response);
+        setApplications([]);
+      }
+    } catch (error) {
+      console.error("Error loading recent applications:", error);
+      setApplications([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Setup realtime updates
   useEffect(() => {
-    const fetchRecentApplications = async () => {
+    console.log('🚀 CompanyDashboard Socket useEffect STARTED');
+    console.log('🚀 User role:', user?.role, 'CompanyId:', user?.companyId);
+    
+    // Initial fetch
+    fetchRecentApplications();
+
+    // Setup socket connection for realtime updates
+    if (user?.role === 'COMPANY' && user?.companyId) {
+      console.log('🚀 Setting up socket for company user');
       try {
-        setLoading(true);
-        const response = await companiesAPI.getRecentApplications();
-        // Kiểm tra cấu trúc dữ liệu trả về
-        if (response?.data?.data) {
-          setApplications(response.data.data.slice(0, 5));
-        } else if (Array.isArray(response?.data)) {
-          setApplications(response.data.slice(0, 5));
-        } else {
-          console.warn('Không có dữ liệu ứng viên hoặc định dạng không đúng:', response);
-          // Sử dụng dữ liệu mẫu
-          setApplications([
-            {
-              candidateName: "Nguyễn Văn A",
-              position: "Frontend Developer",
-              appliedAt: "2 giờ trước",
-              status: "new",
-              avatar: "N",
-              experience: "2 năm",
-              skills: ["React", "TypeScript"],
-            },
-            {
-              candidateName: "Trần Thị B",
-              position: "Backend Engineer",
-              appliedAt: "5 giờ trước",
-              status: "reviewing",
-              avatar: "T",
-              experience: "3 năm",
-              skills: ["Node.js", "MongoDB"],
-            },
-          ]);
+        const token = localStorage.getItem('token');
+        if (token) {
+          console.log('🔌 Setting up socket connection for company:', user.companyId);
+          socketService.connect(token);
+          
+          // Join company room immediately after connection setup
+          const companyId = user.companyId;
+          if (companyId) {
+            console.log('🏢 Requesting to join company room immediately:', companyId);
+            socketService.joinCompanyRoom(companyId);
+          }
+        
+          // Listen for new applications
+          socketService.on('new-application', (applicationData: any) => {
+            console.log('🔔 New application received:', applicationData);
+            
+            // Add new application to the list
+            const newApp = {
+              id: applicationData.id,
+              candidateName: `${applicationData.student?.firstName || ''} ${applicationData.student?.lastName || ''}`.trim() || 'Ứng viên',
+              candidateAvatar: applicationData.student?.avatar || null,
+              jobTitle: applicationData.job?.title || 'Vị trí tuyển dụng',
+              appliedAt: new Date(applicationData.createdAt).toLocaleString('vi-VN'),
+              status: applicationData.status,
+              avatar: applicationData.student?.firstName?.charAt(0)?.toUpperCase() || 'U',
+            };
+            
+            setApplications(prev => [newApp, ...prev.slice(0, 4)]);
+            
+            // Show notification
+            toast.success(`Có ứng viên mới ứng tuyển vào vị trí ${applicationData.job?.title}`);
+          });
+
+          // Listen for application status updates
+          socketService.on('applicationStatusUpdate', (updateData: any) => {
+            console.log('📝 Application status updated:', updateData);
+            
+            setApplications(prev => 
+              prev.map(app => 
+                app.id === updateData.applicationId 
+                  ? { ...app, status: updateData.status }
+                  : app
+              )
+            );
+          });
         }
       } catch (error) {
-        console.error("Error loading recent applications:", error);
-        // Không hiển thị toast để tránh quá nhiều thông báo
-        // Sử dụng dữ liệu mẫu
-        setApplications([
-          {
-            candidateName: "Nguyễn Văn A",
-            position: "Frontend Developer",
-            appliedAt: "2 giờ trước",
-            status: "new",
-            avatar: "N",
-            experience: "2 năm",
-            skills: ["React", "TypeScript"],
-          },
-          {
-            candidateName: "Trần Thị B",
-            position: "Backend Engineer",
-            appliedAt: "5 giờ trước",
-            status: "reviewing",
-            avatar: "T",
-            experience: "3 năm",
-            skills: ["Node.js", "MongoDB"],
-          },
-        ]);
-      } finally {
-        setLoading(false);
+        console.error('Socket connection error:', error);
+      }
+    }
+
+    // Cleanup
+    return () => {
+      console.log('🧹 Cleaning up socket listeners');
+      if (socketService) {
+        socketService.off('new-application');
+        socketService.off('applicationStatusUpdate');
       }
     };
-    
-    // Sử dụng setTimeout để tránh gọi API quá nhiều lần
-    const timer = setTimeout(() => {
-      fetchRecentApplications();
-    }, 1000);
-    
-    return () => clearTimeout(timer);
-  }, []);
+  }, [user?.companyId]); // Only depend on companyId to prevent unnecessary reconnections
+
+  // DEBUG: Add console log to see if useEffect runs
+  console.log('🔄 CompanyDashboard useEffect (socket) - User:', user ? `${user.email} (${user.role})` : 'null', 'CompanyId:', user?.companyId);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -489,11 +527,13 @@ const RecentApplications: React.FC = () => {
               >
                 <ListItemIcon>
                   <Avatar
+                    src={app.candidateAvatar}
                     sx={{
-                      width: 40,
-                      height: 40,
+                      width: 50,
+                      height: 50,
                       background: `linear-gradient(135deg, ${getStatusColor(app.status)}, ${alpha(getStatusColor(app.status), 0.8)})`,
                       fontWeight: 700,
+                      fontSize: '1.2rem',
                     }}
                   >
                     {app.avatar}
@@ -506,9 +546,10 @@ const RecentApplications: React.FC = () => {
                         display: "flex",
                         justifyContent: "space-between",
                         alignItems: "center",
+                        mb: 1,
                       }}
                     >
-                      <Typography variant="subtitle2" fontWeight={700}>
+                      <Typography variant="subtitle1" fontWeight={700}>
                         {app.candidateName}
                       </Typography>
                       <Chip
@@ -524,21 +565,11 @@ const RecentApplications: React.FC = () => {
                   }
                   secondary={
                     <Box sx={{ mt: 0.5 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        {app.position} • {app.experience}
+                      <Typography variant="body2" color="text.primary" fontWeight={500}>
+                        Ứng tuyển: {app.jobTitle}
                       </Typography>
-                      <Box sx={{ display: "flex", gap: 0.5, mt: 0.5 }}>
-                        {app.skills && app.skills.map((skill: string, i: number) => (
-                          <Chip
-                            key={i}
-                            label={skill}
-                            size="small"
-                            variant="outlined"
-                            sx={{ fontSize: "0.65rem", height: 20 }}
-                          />
-                        ))}
-                      </Box>
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
+                        <AccessTime sx={{ fontSize: 14 }} />
                         {app.appliedAt}
                       </Typography>
                     </Box>

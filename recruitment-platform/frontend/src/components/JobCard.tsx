@@ -114,6 +114,7 @@ interface JobCardProps {
   onSaveClick?: (jobId: string) => void;
   onMenuClick?: (event: React.MouseEvent<HTMLElement>, job: Job) => void;
   viewMode?: "grid" | "list";
+  showApplyButton?: boolean; // New prop to control apply button visibility
 }
 
 const JobCard: React.FC<JobCardProps> = ({
@@ -123,6 +124,7 @@ const JobCard: React.FC<JobCardProps> = ({
   onSaveClick,
   onMenuClick,
   viewMode = "grid",
+  showApplyButton = true, // Default to true for backward compatibility
 }) => {
   const theme = useTheme();
   const [isHovered, setIsHovered] = useState(false);
@@ -599,53 +601,54 @@ const JobCard: React.FC<JobCardProps> = ({
                 )}
               </Box>
 
-              <Button
-                variant={job.hasApplied ? "outlined" : "contained"}
-                size="large"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onApplyClick(job);
-                }}
-                onMouseEnter={() => setIsApplyHovered(true)}
-                onMouseLeave={() => setIsApplyHovered(false)}
-                disabled={job.hasApplied}
-                startIcon={
-                  <Send
-                    sx={{
-                      transform:
-                        isApplyHovered && !job.hasApplied
-                          ? "translateX(4px)"
-                          : "translateX(0)",
-                      transition: "transform 0.3s ease",
-                    }}
-                  />
-                }
-                sx={{
-                  minWidth: 160,
-                  py: 1.5,
-                  px: 3,
-                  fontWeight: 700,
-                  fontSize: "1rem",
-                  borderRadius: 2,
-                  textTransform: "none",
-                  background: job.hasApplied
-                    ? "transparent"
-                    : `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
-                  boxShadow: job.hasApplied ? 2 : 4,
-                  border: job.hasApplied
-                    ? `2px solid ${theme.palette.success.main}`
-                    : "none",
-                  transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                  "&:hover": {
-                    transform: job.hasApplied
-                      ? "none"
-                      : "translateY(-2px) scale(1.05)",
-                    boxShadow: job.hasApplied ? 2 : 8,
+              {showApplyButton && (
+                <Button
+                  variant={job.hasApplied ? "outlined" : "contained"}
+                  size="large"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onApplyClick(job);
+                  }}
+                  onMouseEnter={() => setIsApplyHovered(true)}
+                  onMouseLeave={() => setIsApplyHovered(false)}
+                  disabled={job.hasApplied}
+                  startIcon={
+                    <Send
+                      sx={{
+                        transform:
+                          isApplyHovered && !job.hasApplied
+                            ? "translateX(4px)"
+                            : "translateX(0)",
+                        transition: "transform 0.3s ease",
+                      }}
+                    />
+                  }
+                  sx={{
+                    minWidth: 160,
+                    py: 1.5,
+                    px: 3,
+                    fontWeight: 700,
+                    fontSize: "1rem",
+                    borderRadius: 2,
+                    textTransform: "none",
                     background: job.hasApplied
                       ? "transparent"
-                      : `linear-gradient(135deg, ${theme.palette.secondary.main} 0%, ${theme.palette.primary.main} 100%)`,
-                  },
-                  "&:disabled": {
+                      : `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
+                    boxShadow: job.hasApplied ? 2 : 4,
+                    border: job.hasApplied
+                      ? `2px solid ${theme.palette.success.main}`
+                      : "none",
+                    transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                    "&:hover": {
+                      transform: job.hasApplied
+                        ? "none"
+                        : "translateY(-2px) scale(1.05)",
+                      boxShadow: job.hasApplied ? 2 : 8,
+                      background: job.hasApplied
+                        ? "transparent"
+                        : `linear-gradient(135deg, ${theme.palette.secondary.main} 0%, ${theme.palette.primary.main} 100%)`,
+                    },
+                    "&:disabled": {
                     color: theme.palette.success.main,
                     border: `2px solid ${theme.palette.success.main}`,
                   },
@@ -653,6 +656,7 @@ const JobCard: React.FC<JobCardProps> = ({
               >
                 {job.hasApplied ? "✓ Đã ứng tuyển" : "Ứng tuyển ngay"}
               </Button>
+              )}
 
               {job.applicationsCount !== undefined && (
                 <Typography
@@ -975,25 +979,26 @@ const JobCard: React.FC<JobCardProps> = ({
             )}
           </Box>
 
-          <Button
-            variant={job.hasApplied ? "outlined" : "contained"}
-            size="small"
-            onClick={(e) => {
-              e.stopPropagation();
-              onApplyClick(job);
-            }}
-            disabled={job.hasApplied}
-            startIcon={<Send />}
-            sx={{
-              minWidth: 120,
-              fontWeight: 600,
-              borderRadius: 2,
-              background: job.hasApplied
-                ? "transparent"
-                : `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
-              border: job.hasApplied
-                ? `2px solid ${theme.palette.success.main}`
-                : "none",
+          {showApplyButton && (
+            <Button
+              variant={job.hasApplied ? "outlined" : "contained"}
+              size="small"
+              onClick={(e) => {
+                e.stopPropagation();
+                onApplyClick(job);
+              }}
+              disabled={job.hasApplied}
+              startIcon={<Send />}
+              sx={{
+                minWidth: 120,
+                fontWeight: 600,
+                borderRadius: 2,
+                background: job.hasApplied
+                  ? "transparent"
+                  : `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
+                border: job.hasApplied
+                  ? `2px solid ${theme.palette.success.main}`
+                  : "none",
               transition: "all 0.3s ease",
               "&:hover": {
                 transform: job.hasApplied
@@ -1011,6 +1016,7 @@ const JobCard: React.FC<JobCardProps> = ({
           >
             {job.hasApplied ? "✓ Đã ứng tuyển" : "Ứng tuyển"}
           </Button>
+          )}
         </Box>
 
         {/* Hover Actions */}

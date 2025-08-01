@@ -4,41 +4,81 @@ import { API_BASE_URL } from '../config';
 class SocketService {
   private socket: Socket | null = null;
   private listeners: Map<string, Function[]> = new Map();
+  private pendingCompanyRoom: string | null = null; // Store company room to join after connect
+  private currentToken: string | null = null; // Store current token for comparison
 
   constructor() {
     this.socket = null;
   }
 
   connect(token: string): void {
-    if (this.socket) return;
+    console.log('🔌 [SocketService] connect() called with token:', token ? `${token.substring(0, 20)}...` : 'NO_TOKEN');
+    
+    // Don't reconnect if already connected with same token
+    if (this.socket?.connected && this.currentToken === token) {
+      console.log('🔌 [SocketService] Socket already connected with same token');
+      return;
+    }
 
+    // Disconnect existing socket if any
+    if (this.socket) {
+      console.log('🔌 [SocketService] Disconnecting existing socket before new connection');
+      this.socket.disconnect();
+      this.socket = null;
+    }
+
+    console.log('🔌 [SocketService] Creating new socket connection to:', API_BASE_URL);
+    this.currentToken = token; // Store the current token
     this.socket = io(API_BASE_URL, {
       auth: {
         token
       },
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'], // Add polling as fallback
       reconnection: true,
       reconnectionAttempts: 5,
-      reconnectionDelay: 1000
+      reconnectionDelay: 1000,
+      timeout: 20000,
+      forceNew: true // Force new connection
     });
 
+    console.log('🔌 [SocketService] Socket created, setting up event listeners...');
     this.setupEventListeners();
   }
 
   private setupEventListeners(): void {
-    if (!this.socket) return;
+    if (!this.socket) {
+      console.error('🚨 [SocketService] Cannot setup listeners - socket is null');
+      return;
+    }
+
+    console.log('🔌 [SocketService] Setting up event listeners...');
 
     this.socket.on('connect', () => {
-      console.log('🔌 Socket connected:', this.socket?.id);
+      console.log('🔌 [SocketService] Socket connected:', this.socket?.id);
+      console.log('🔌 [SocketService] Socket connected state:', this.socket?.connected);
+      
+      // Auto-join company room if pending
+      if (this.pendingCompanyRoom) {
+        console.log('🏢 [SocketService] Auto-joining pending company room:', this.pendingCompanyRoom);
+        this.socket?.emit('join-company-room', this.pendingCompanyRoom);
+        console.log('🏢 [SocketService] Emitted join-company-room event for:', this.pendingCompanyRoom);
+        this.pendingCompanyRoom = null;
+      }
     });
 
     this.socket.on('disconnect', () => {
-      console.log('🔌 Socket disconnected');
+      console.log('🔌 [SocketService] Socket disconnected');
     });
 
     this.socket.on('connect_error', (error) => {
-      console.error('Socket connection error:', error);
+      console.error('🚨 [SocketService] Socket connection error:', error);
     });
+
+    this.socket.on('reconnect', () => {
+      console.log('🔄 [SocketService] Socket reconnected');
+    });
+
+    console.log('🔌 [SocketService] Event listeners setup completed');
   }
 
   disconnect(): void {
@@ -46,6 +86,7 @@ class SocketService {
       this.socket.disconnect();
       this.socket = null;
     }
+    this.currentToken = null; // Clear the stored token
   }
 
   joinUserRoom(userId: string): void {
@@ -55,8 +96,24 @@ class SocketService {
   }
 
   joinCompanyRoom(companyId: string): void {
-    if (this.socket) {
+    console.log('🏢 [SocketService] joinCompanyRoom called with:', companyId);
+    console.log('🏢 [SocketService] Socket state - connected:', this.socket?.connected, 'exists:', !!this.socket);
+    
+    if (this.socket?.connected) {
+      console.log('🏢 [SocketService] Joining company room immediately:', companyId);
       this.socket.emit('join-company-room', companyId);
+      console.log('🏢 [SocketService] Emitted join-company-room event for:', companyId);
+    } else {
+      console.log('🏢 [SocketService] Socket not connected, storing company room for later:', companyId);
+      this.pendingCompanyRoom = companyId;
+      
+      // If socket exists but not connected, try to connect
+      if (this.socket) {
+        console.log('🏢 [SocketService] Socket exists but not connected, attempting to connect...');
+        this.socket.connect();
+      } else {
+        console.log('🚨 [SocketService] No socket instance exists! Cannot join room');
+      }
     }
   }
 

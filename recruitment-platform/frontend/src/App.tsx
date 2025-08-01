@@ -26,6 +26,7 @@ import {
   CandidatesPage,
   CreateJobPage,
 } from "./components";
+import CandidateProfile from "./components/CandidateProfile";
 import LoadingScreen from "./components/LoadingScreen";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -177,6 +178,18 @@ const AppContent: React.FC = () => {
               user?.role === "COMPANY" || user?.role === "ADMIN" ? (
                 <PageWrapper>
                   <CandidatesPage />
+                </PageWrapper>
+              ) : (
+                <Navigate to="/" replace />
+              )
+            }
+          />
+          <Route
+            path="/candidates/:studentId"
+            element={
+              user?.role === "COMPANY" || user?.role === "ADMIN" ? (
+                <PageWrapper>
+                  <CandidateProfile />
                 </PageWrapper>
               ) : (
                 <Navigate to="/" replace />

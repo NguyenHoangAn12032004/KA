@@ -124,13 +124,6 @@ const QuickActions: React.FC<QuickActionsProps> = ({ userRole = 'COMPANY' }) => 
             secondaryText: 'Báo cáo chi tiết',
             color: theme.palette.success.main,
             onClick: () => navigate('/analytics')
-          },
-          {
-            icon: <NotificationsIcon sx={{ fontSize: 32 }} />,
-            primaryText: 'Thông báo',
-            secondaryText: '12 tin mới',
-            color: theme.palette.warning.main,
-            onClick: () => navigate('/notifications')
           }
         ];
       case 'STUDENT':

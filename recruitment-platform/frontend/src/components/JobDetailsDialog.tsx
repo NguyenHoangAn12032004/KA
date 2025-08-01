@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import {
   Dialog,
   DialogTitle,
@@ -174,6 +175,7 @@ const JobDetailsDialog: React.FC<JobDetailsDialogProps> = ({
   onSave,
   onShare
 }) => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState(0);
   const [isSaved, setIsSaved] = useState(false);
   const [showFullDescription, setShowFullDescription] = useState(false);
@@ -880,23 +882,25 @@ const JobDetailsDialog: React.FC<JobDetailsDialogProps> = ({
           >
             Close
           </Button>
-          <Button
-            variant="contained"
-            onClick={() => onApply(job)}
-            disabled={job.hasApplied}
-            startIcon={job.hasApplied ? <CheckCircle /> : <Send />}
-            size="large"
-            sx={{ 
-              minWidth: 140,
-              fontWeight: 600,
-              ...(job.hasApplied ? {
-                bgcolor: 'success.main',
-                '&:hover': { bgcolor: 'success.dark' }
-              } : {})
-            }}
-          >
-            {job.hasApplied ? 'Applied' : 'Apply Now'}
-          </Button>
+          {user && user.role === 'STUDENT' && (
+            <Button
+              variant="contained"
+              onClick={() => onApply(job)}
+              disabled={job.hasApplied}
+              startIcon={job.hasApplied ? <CheckCircle /> : <Send />}
+              size="large"
+              sx={{ 
+                minWidth: 140,
+                fontWeight: 600,
+                ...(job.hasApplied ? {
+                  bgcolor: 'success.main',
+                  '&:hover': { bgcolor: 'success.dark' }
+                } : {})
+              }}
+            >
+              {job.hasApplied ? 'Applied' : 'Apply Now'}
+            </Button>
+          )}
         </Box>
       </DialogActions>
     </Dialog>

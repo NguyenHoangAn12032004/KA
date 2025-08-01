@@ -367,11 +367,14 @@ router.post('/:id/follow', authenticateToken, async (req: AuthRequest, res: Resp
       });
 
       // Emit real-time event
-      req.io?.emit('company-unfollowed', {
-        companyId,
-        userId,
-        timestamp: new Date()
-    });
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('company-unfollowed', {
+          companyId,
+          userId,
+          timestamp: new Date()
+        });
+      }
 
     res.json({
       success: true,
@@ -396,12 +399,15 @@ router.post('/:id/follow', authenticateToken, async (req: AuthRequest, res: Resp
       });
 
       // Emit real-time event
-      req.io?.emit('company-followed', {
-        companyId,
-        userId,
-        companyName: company.companyName,
-        timestamp: new Date()
-      });
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('company-followed', {
+          companyId,
+          userId,
+          companyName: company.companyName,
+          timestamp: new Date()
+        });
+      }
 
       res.json({
         success: true,
@@ -445,11 +451,14 @@ router.post('/:id/view', async (req: Request, res: Response) => {
     });
 
     // Emit real-time event for statistics
-    req.io?.emit('company-viewed', {
-      companyId,
-      userId,
-      timestamp: new Date()
-    });
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('company-viewed', {
+        companyId,
+        userId,
+        timestamp: new Date()
+      });
+    }
 
     res.json({
       success: true,
