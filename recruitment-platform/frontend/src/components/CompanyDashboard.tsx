@@ -713,12 +713,14 @@ const CompanyDashboard: React.FC = () => {
           console.log('🔌 Setting up socket connection for company:', user.companyId);
           socketService.connect(token);
           
-          // Join company room immediately after connection setup
-          const companyId = user.companyId;
-          if (companyId) {
-            console.log('🏢 Requesting to join company room immediately:', companyId);
-            socketService.joinCompanyRoom(companyId);
-          }
+          // Wait a bit for connection then join room
+          setTimeout(() => {
+            const companyId = user.companyId;
+            if (companyId) {
+              console.log('🏢 Joining company room after delay:', companyId);
+              socketService.joinCompanyRoom(companyId);
+            }
+          }, 1000);
         
           // Listen for new applications
           socketService.on('new-application', (applicationData: any) => {
@@ -756,14 +758,24 @@ const CompanyDashboard: React.FC = () => {
 
           // Listen for job view events
           socketService.on('job-viewed', (data: any) => {
-            console.log('👁️ Job viewed:', data);
+            console.log('👁️ Job viewed event received:', data);
+            console.log('📊 Event data:', JSON.stringify(data, null, 2));
             
-            // Update view count in jobs list
-            setJobs((prev: any) => prev.map((job: any) => 
-              job.id === data.jobId 
-                ? { ...job, viewsCount: (job.viewsCount || 0) + 1 }
-                : job
-            ));
+            // Update view count in jobs list using the actual total from server
+            setJobs((prev: any) => {
+              const updatedJobs = prev.map((job: any) => 
+                job.id === data.jobId 
+                  ? { 
+                      ...job, 
+                      viewsCount: data.totalViews || ((job.viewsCount || 0) + 1),
+                      viewCount: data.totalViews || ((job.viewCount || 0) + 1) // Support both field names
+                    }
+                  : job
+              );
+              console.log('📊 Jobs updated from', prev.length, 'to', updatedJobs.length, 'items');
+              console.log('📊 Updated job viewsCount for', data.jobId, ':', data.totalViews);
+              return updatedJobs;
+            });
             
             // Update total views in stats incrementally for MUI Grid cards
             setCompanyStats((prev: any) => ({
@@ -774,6 +786,9 @@ const CompanyDashboard: React.FC = () => {
                 newViews: prev.weeklyTrends.newViews + 1
               }
             }));
+            
+            // Force re-render by updating refresh trigger
+            setRefreshTrigger(prev => prev + 1);
           });
         }
       } catch (error) {

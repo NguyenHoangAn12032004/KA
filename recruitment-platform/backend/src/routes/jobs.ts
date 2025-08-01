@@ -322,16 +322,36 @@ router.get('/company', authenticateToken, requireRole(['COMPANY', 'HR_MANAGER'])
             }
           }
         },
-        company_profiles: true
+        company_profiles: true,
+        _count: {
+          select: {
+            applications: true,
+            jobViews: true
+          }
+        }
       },
       orderBy: {
         createdAt: 'desc'
       }
     });
 
+    // Format jobs with proper view counts
+    const formattedJobs = jobs.map(job => ({
+      ...job,
+      applicationsCount: job._count?.applications || 0,
+      viewsCount: job.viewCount || job._count?.jobViews || 0, // Use stored viewCount, fallback to real-time count
+      viewCount: job.viewCount || job._count?.jobViews || 0, // Ensure both fields are available
+      // Also make sure _count data is preserved for compatibility
+      _count: {
+        ...job._count,
+        applications: job._count?.applications || 0,
+        jobViews: job._count?.jobViews || 0
+      }
+    }));
+
     res.json({
       success: true,
-      data: jobs
+      data: formattedJobs
     });
   } catch (error) {
     console.error('Error fetching company jobs:', error);
