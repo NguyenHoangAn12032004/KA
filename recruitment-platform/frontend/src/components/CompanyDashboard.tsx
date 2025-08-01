@@ -320,8 +320,8 @@ const CompanyStatCard: React.FC<{
   );
 };
 
-// Recent Applications Component
-const RecentApplications: React.FC<{ refreshTrigger: number }> = ({ refreshTrigger }) => {
+// Recent Applications Component  
+const RecentApplications: React.FC<{ recentApplicationsRefresh: number }> = ({ recentApplicationsRefresh }) => {
   const theme = useTheme();
   const { user } = useAuth();
   const [applications, setApplications] = useState<any[]>([]);
@@ -350,10 +350,10 @@ const RecentApplications: React.FC<{ refreshTrigger: number }> = ({ refreshTrigg
     }
   };
 
-  // Gọi API khi component mount hoặc khi có refreshTrigger
+  // Gọi API khi component mount hoặc khi có recentApplicationsRefresh
   useEffect(() => {
     fetchRecentApplications();
-  }, [refreshTrigger]);
+  }, [recentApplicationsRefresh]);
 
   const handleViewMoreCandidates = () => {
     navigate('/candidates');
@@ -693,6 +693,7 @@ const CompanyDashboard: React.FC = () => {
   });
   const [dataError, setDataError] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [recentApplicationsRefresh, setRecentApplicationsRefresh] = useState(0);
 
   useEffect(() => {
     loadCompanyData();
@@ -733,8 +734,15 @@ const CompanyDashboard: React.FC = () => {
               }
             }));
             
-            // Trigger refresh of recent applications
-            setRefreshTrigger(prev => prev + 1);
+            // Update applicationsCount for the specific job in jobs list
+            setJobs((prev: any) => prev.map((job: any) => 
+              job.id === applicationData.jobId 
+                ? { ...job, applicationsCount: (job.applicationsCount || 0) + 1 }
+                : job
+            ));
+            
+            // Trigger refresh of recent applications only
+            setRecentApplicationsRefresh(prev => prev + 1);
             
             // Show notification
             toast.success(`Có ứng viên mới ứng tuyển vào vị trí ${applicationData.job?.title}`);
@@ -1353,7 +1361,7 @@ const CompanyDashboard: React.FC = () => {
             <QuickActions userRole="COMPANY" />
           </Grid>
           <Grid item xs={12} md={4}>
-            <RecentApplications refreshTrigger={refreshTrigger} />
+            <RecentApplications recentApplicationsRefresh={recentApplicationsRefresh} />
           </Grid>
           <Grid item xs={12} md={4}>
             <PerformanceMetrics />
