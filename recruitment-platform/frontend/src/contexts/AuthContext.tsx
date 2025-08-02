@@ -87,12 +87,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.log('✅ Token is valid, user data:', response.data.data);
         // Extract companyId from company_profiles if it exists
         const userData = response.data.data;
-        if (userData.company_profiles && userData.company_profiles.id && !userData.companyId) {
+        if (userData && userData.company_profiles && userData.company_profiles.id && !userData.companyId) {
           userData.companyId = userData.company_profiles.id;
           console.log('🏢 Added companyId to user data:', userData.companyId);
         }
         // Update user data if needed
-        updateUser(userData);
+        if (userData) {
+          updateUser(userData);
+        }
       } else {
         console.warn('⚠️ Token verification failed, logging out');
         logout();

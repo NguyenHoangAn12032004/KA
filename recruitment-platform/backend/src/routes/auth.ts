@@ -3,6 +3,17 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '../utils/database';
 import { logger } from '../utils/logger';
 import { generateToken } from '../utils/jwt';
+import { authenticateToken } from '../middleware/auth';
+
+// AuthRequest interface
+interface AuthRequest extends Request {
+  user?: {
+    id: string;
+    email: string;
+    role: string;
+    companyId?: string;
+  };
+}
 
 const router = Router();
 
@@ -151,14 +162,50 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
 });
 
 // Get current user
-router.get('/me', async (req: Request, res: Response): Promise<void> => {
+router.get('/me', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    // This will be implemented with auth middleware
+    if (!req.user) {
+      res.status(401).json({
+        success: false,
+        message: 'User not authenticated'
+      });
+      return;
+    }
+
+    // Get full user data with company profile
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      include: {
+        company_profiles: true,
+        studentProfile: true
+      }
+    });
+
+    if (!user) {
+      res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+      return;
+    }
+
     res.json({
       success: true,
-      message: 'Auth middleware needed'
+      data: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        isActive: user.isActive,
+        isVerified: user.isVerified,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+        company_profiles: user.company_profiles,
+        studentProfile: user.studentProfile,
+        companyId: user.company_profiles?.id
+      }
     });
   } catch (error) {
+    console.error('❌ Error getting current user:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'

@@ -124,7 +124,12 @@ class SocketService {
   }
 
   on(event: string, callback: Function): void {
-    if (!this.socket) return;
+    if (!this.socket) {
+      console.log('❌ [SocketService] Cannot register listener - no socket instance');
+      return;
+    }
+
+    console.log(`👂 [SocketService] Registering listener for event: ${event}`);
 
     // Add to listeners map for cleanup
     if (!this.listeners.has(event)) {
@@ -134,6 +139,7 @@ class SocketService {
 
     // Register with socket
     this.socket.on(event, (data: any) => {
+      console.log(`📨 [SocketService] Received event ${event}:`, data);
       callback(data);
     });
   }

@@ -90,6 +90,7 @@ import { jobsAPI, applicationsAPI, companyDashboardAPI } from '../services/api';
 import { toast } from "react-toastify";
 import socketService from '../services/socketService';
 import QuickActions from "./QuickActions";
+import JobActionModal, { Job } from "./JobActionModal";
 import { useNavigate } from "react-router-dom";
 
 // Modern animations (same as AdminDashboard)
@@ -131,21 +132,30 @@ interface JobPosting {
   id: string;
   title: string;
   location: string;
+  description?: string;
+  requirements?: string[];
+  benefits?: string[];
+  responsibilities?: string[];
   salary?: string;
   salaryMin?: number;
   salaryMax?: number;
   currency?: string;
-  type: "FULL_TIME" | "PART_TIME" | "INTERNSHIP" | "CONTRACT";
+  jobType: "FULL_TIME" | "PART_TIME" | "INTERNSHIP" | "CONTRACT" | "FREELANCE";
   workMode?: "ONSITE" | "REMOTE" | "HYBRID";
-  experienceLevel?: "ENTRY" | "JUNIOR" | "INTERMEDIATE" | "SENIOR";
-  description?: string;
-  requirements?: string;
-  benefits?: string;
+  experienceLevel?: "ENTRY" | "JUNIOR" | "MID" | "SENIOR" | "LEAD";
+  requiredSkills?: string[];
+  preferredSkills?: string[];
   applicationDeadline?: string;
   publishedAt?: string;
   isActive: boolean;
   applicationsCount?: number;
-  viewsCount?: number;
+  viewCount?: number;
+  maxApplications?: number;
+  department?: string;
+  qualifications?: string[];
+  reportingTo?: string;
+  createdAt?: string;
+  updatedAt?: string;
   company?: {
     id: string;
     companyName: string;
@@ -675,11 +685,17 @@ const CompanyDashboard: React.FC = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [jobs, setJobs] = useState<JobPosting[]>([]);
-  const [selectedJob, setSelectedJob] = useState<JobPosting | null>(null);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  
+  // Job Action Modal states
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalAction, setModalAction] = useState<'view' | 'edit' | 'applications' | 'delete' | 'toggle-status' | null>(null);
+  const [modalJob, setModalJob] = useState<Job | null>(null);
+  
   const [companyStats, setCompanyStats] = useState({
     totalJobs: 0,
     activeJobs: 0,
@@ -767,13 +783,12 @@ const CompanyDashboard: React.FC = () => {
                 job.id === data.jobId 
                   ? { 
                       ...job, 
-                      viewsCount: data.totalViews || ((job.viewsCount || 0) + 1),
-                      viewCount: data.totalViews || ((job.viewCount || 0) + 1) // Support both field names
+                      viewCount: data.totalViews || ((job.viewCount || 0) + 1),
                     }
                   : job
               );
               console.log('📊 Jobs updated from', prev.length, 'to', updatedJobs.length, 'items');
-              console.log('📊 Updated job viewsCount for', data.jobId, ':', data.totalViews);
+              console.log('📊 Updated job viewCount for', data.jobId, ':', data.totalViews);
               return updatedJobs;
             });
             
@@ -864,6 +879,94 @@ const CompanyDashboard: React.FC = () => {
     setRefreshTrigger(prev => prev + 1);
   };
 
+  // Job Action Modal handlers
+  const openModal = (action: 'view' | 'edit' | 'applications' | 'delete' | 'toggle-status', job: Job) => {
+    setModalAction(action);
+    setModalJob(job);
+    setModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setModalAction(null);
+    setModalJob(null);
+  };
+
+  const handleJobSave = async (jobData: Partial<Job>) => {
+    if (!modalJob) return;
+    
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:5000/api/jobs/${modalJob.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(jobData)
+      });
+
+      if (response.ok) {
+        toast.success('Cập nhật tin tuyển dụng thành công!');
+        handleRefresh();
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.message || 'Lỗi khi cập nhật tin tuyển dụng');
+      }
+    } catch (error) {
+      console.error('Error updating job:', error);
+      toast.error('Không thể cập nhật tin tuyển dụng');
+    }
+  };
+
+  const handleJobDelete = async (jobId: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:5000/api/jobs/${jobId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        toast.success('Xóa tin tuyển dụng thành công!');
+        handleRefresh();
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.message || 'Lỗi khi xóa tin tuyển dụng');
+      }
+    } catch (error) {
+      console.error('Error deleting job:', error);
+      toast.error('Không thể xóa tin tuyển dụng');
+    }
+  };
+
+  const handleJobToggleStatus = async (jobId: string, isActive: boolean) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:5000/api/jobs/${jobId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ isActive })
+      });
+
+      if (response.ok) {
+        toast.success(`Đã ${isActive ? 'kích hoạt' : 'tạm dừng'} tin tuyển dụng thành công!`);
+        handleRefresh();
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.message || 'Lỗi khi cập nhật trạng thái');
+      }
+    } catch (error) {
+      console.error('Error toggling job status:', error);
+      toast.error('Không thể cập nhật trạng thái tin tuyển dụng');
+    }
+  };
+
   const handleMenuClick = (
     event: React.MouseEvent<HTMLElement>,
     job: JobPosting,
@@ -878,46 +981,29 @@ const CompanyDashboard: React.FC = () => {
   };
 
   const handleEditJob = () => {
-    setEditDialogOpen(true);
+    if (selectedJob) {
+      openModal('edit', selectedJob);
+    }
     handleMenuClose();
   };
 
   const handleDeleteJob = () => {
-    setDeleteDialogOpen(true);
-    handleMenuClose();
-  };
-
-  const confirmDelete = async () => {
     if (selectedJob) {
-      try {
-        await jobsAPI.delete(selectedJob.id);
-        toast.success('Đã xóa tin tuyển dụng thành công');
-        handleRefresh(); // Tải lại dữ liệu sau khi xóa
-        setDeleteDialogOpen(false);
-      } catch (error) {
-        console.error('❌ Lỗi khi xóa công việc:', error);
-        toast.error('Không thể xóa tin tuyển dụng. Vui lòng thử lại sau.');
-      }
+      openModal('delete', selectedJob);
     }
-  };
-
-  const handleViewApplications = (jobId: string) => {
-    // Chuyển hướng đến trang ứng viên của công việc này
-    console.log('Xem ứng viên cho công việc:', jobId);
-    navigate('/candidates');
     handleMenuClose();
   };
 
-  const handleToggleJobStatus = async (job: JobPosting) => {
-    try {
-      await jobsAPI.updateStatus(job.id, !job.isActive);
-      toast.success(`Đã ${job.isActive ? 'tạm dừng' : 'kích hoạt'} tin tuyển dụng`);
-      handleRefresh(); // Tải lại dữ liệu sau khi cập nhật
-    } catch (error) {
-      console.error('❌ Lỗi khi cập nhật trạng thái công việc:', error);
-      toast.error('Không thể cập nhật trạng thái tin tuyển dụng.');
-    }
-    handleMenuClose();
+  const handleViewJob = (job: Job) => {
+    openModal('view', job);
+  };
+
+  const handleViewApplications = (job: Job) => {
+    openModal('applications', job);
+  };
+
+  const handleToggleJobStatus = (job: Job) => {
+    openModal('toggle-status', job);
   };
 
   const handleCreateJob = () => {
@@ -1089,7 +1175,7 @@ const CompanyDashboard: React.FC = () => {
                           {job.title}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
-                          {job.type}
+                          {job.jobType}
                         </Typography>
                       </TableCell>
                       <TableCell>
@@ -1125,7 +1211,7 @@ const CompanyDashboard: React.FC = () => {
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2" fontWeight={600}>
-                          {job.viewsCount || 0}
+                          {job.viewCount || 0}
                         </Typography>
                       </TableCell>
                       <TableCell>
@@ -1412,7 +1498,7 @@ const CompanyDashboard: React.FC = () => {
             },
           }}
         >
-          <MenuItem onClick={() => console.log("View details")}>
+          <MenuItem onClick={() => selectedJob && handleViewJob(selectedJob)}>
             <Visibility sx={{ mr: 2, color: theme.palette.info.main }} />
             Xem chi tiết
           </MenuItem>
@@ -1420,7 +1506,7 @@ const CompanyDashboard: React.FC = () => {
             <Edit sx={{ mr: 2, color: theme.palette.warning.main }} />
             Chỉnh sửa
           </MenuItem>
-          <MenuItem onClick={() => selectedJob && handleViewApplications(selectedJob.id)}>
+          <MenuItem onClick={() => selectedJob && handleViewApplications(selectedJob)}>
             <People sx={{ mr: 2, color: theme.palette.success.main }} />
             Xem ứng viên ({selectedJob?.applicationsCount || 0})
           </MenuItem>
@@ -1443,45 +1529,16 @@ const CompanyDashboard: React.FC = () => {
           </MenuItem>
         </Menu>
 
-        {/* Delete Confirmation Dialog */}
-        <Dialog
-          open={deleteDialogOpen}
-          onClose={() => setDeleteDialogOpen(false)}
-          PaperProps={{
-            sx: {
-              borderRadius: 3,
-              background: alpha(theme.palette.background.paper, 0.95),
-              backdropFilter: "blur(20px)",
-            },
-          }}
-        >
-          <DialogTitle sx={{ fontWeight: 700 }}>
-            Xác nhận xóa tin tuyển dụng
-          </DialogTitle>
-          <DialogContent>
-            <Typography>
-              Bạn có chắc chắn muốn xóa tin tuyển dụng "{selectedJob?.title}"?
-              Hành động này không thể hoàn tác.
-            </Typography>
-          </DialogContent>
-          <DialogActions sx={{ p: 3 }}>
-            <Button
-              onClick={() => setDeleteDialogOpen(false)}
-              variant="outlined"
-              sx={{ borderRadius: 2 }}
-            >
-              Hủy
-            </Button>
-            <Button
-              onClick={confirmDelete}
-              variant="contained"
-              color="error"
-              sx={{ borderRadius: 2 }}
-            >
-              Xóa
-            </Button>
-          </DialogActions>
-        </Dialog>
+        {/* Job Action Modal */}
+        <JobActionModal
+          open={modalOpen}
+          onClose={closeModal}
+          job={modalJob}
+          action={modalAction}
+          onSave={handleJobSave}
+          onDelete={handleJobDelete}
+          onToggleStatus={handleJobToggleStatus}
+        />
       </Container>
     </Box>
   );

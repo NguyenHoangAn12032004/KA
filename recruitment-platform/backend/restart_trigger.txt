@@ -1,1 +1,1 @@
-restart
+restart server - test analytics routes loading

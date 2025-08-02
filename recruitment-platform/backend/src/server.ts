@@ -17,10 +17,10 @@ import usersEnhancedRoutes from './routes/users-enhanced';
 import usersSimpleRoutes from './routes/users-simple';
 import jobsRoutes from './routes/jobs';
 import companiesRoutes from './routes/companies';
-import applicationsRoutes from './routes/applications';
+import applicationsRoutes from './routes/applications-fixed';
 import uploadRoutes from './routes/upload';
 import savedJobsRoutes from './routes/savedJobs';
-import analyticsRoutes from './routes/analytics';
+import analyticsRoutes from './routes/analytics-simple';
 import studentDashboardRoutes from './routes/studentDashboard';
 import companyDashboardRoutes from './routes/companyDashboard';
 import notificationsRoutes from './routes/notifications';
@@ -222,9 +222,11 @@ app.use('/api/users-simple', usersSimpleRoutes);
 app.use('/api/jobs', jobsRoutes);
 app.use('/api/companies', companiesRoutes);
 app.use('/api/applications', applicationsRoutes);
+console.log('✅ Applications routes registered at /api/applications');
 app.use('/api/upload', uploadRoutes);
 app.use('/api/saved-jobs', savedJobsRoutes);
 app.use('/api/analytics', analyticsRoutes);
+console.log('✅ Analytics routes registered at /api/analytics');
 app.use('/api/student-dashboard', studentDashboardRoutes);
 app.use('/api/company-dashboard', companyDashboardRoutes);
 app.use('/api/notifications', notificationsRoutes);
@@ -236,8 +238,8 @@ app.set('io', io);
 app.use(notFound);
 app.use(errorHandler);
 
-// Force restart - Updated timestamp: 2025-07-13 - Back to port 3001
-const PORT = process.env.PORT || 3001; // Changed to port 3001 to avoid conflicts
+// Server port configuration - Use environment PORT or default to 5000
+const PORT = process.env.PORT || 5000;
 
 console.log(`🔧 Attempting to start server on port ${PORT}`);
 

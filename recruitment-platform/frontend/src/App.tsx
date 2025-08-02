@@ -26,6 +26,11 @@ import {
   CandidatesPage,
   CreateJobPage,
 } from "./components";
+import AnalyticsDemo from "./components/AnalyticsDemo";
+import SimpleAnalyticsTest from "./components/SimpleAnalyticsTest";
+import SimpleAnalytics from "./components/SimpleAnalytics";
+import DebugAnalytics from "./components/DebugAnalytics";
+import ModernAnalyticsDashboard from "./components/ModernAnalyticsDashboard";
 import CandidateProfile from "./components/CandidateProfile";
 import LoadingScreen from "./components/LoadingScreen";
 import { ToastContainer } from "react-toastify";
@@ -213,12 +218,36 @@ const AppContent: React.FC = () => {
             element={
               user ? (
                 <PageWrapper>
-                  <AnalyticsPage />
+                  <ModernAnalyticsDashboard />
                 </PageWrapper>
               ) : (
                 <Navigate to="/" replace />
               )
             }
+          />
+          <Route
+            path="/analytics-demo"
+            element={
+              user ? (
+                <PageWrapper>
+                  <AnalyticsDemo />
+                </PageWrapper>
+              ) : (
+                <Navigate to="/" replace />
+              )
+            }
+          />
+          <Route
+            path="/analytics-test"
+            element={<SimpleAnalyticsTest />}
+          />
+          <Route
+            path="/simple-analytics"
+            element={<SimpleAnalytics />}
+          />
+          <Route
+            path="/modern-analytics"
+            element={<ModernAnalyticsDashboard />}
           />
           <Route
             path="/notifications"

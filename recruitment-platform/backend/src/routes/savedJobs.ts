@@ -108,6 +108,34 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
     });
 
     console.log('✅ Job saved successfully for user:', userId);
+
+    // � TRACK ANALYTICS EVENT
+    // await trackAnalyticsEvent('job_saved', userId, jobId, savedJob.job.companyId, 1, {
+    //   jobTitle: savedJob.job.title,
+    //   savedAt: new Date()
+    // });
+
+    // �🚨 EMIT ANALYTICS UPDATE EVENTS FOR REAL-TIME DASHBOARD SYNC
+    const io = (req as any).io;
+    if (io) {
+      // Emit analytics-update event for student analytics dashboard
+      io.to(`user-${userId}`).emit('analytics-update', {
+        type: 'job_saved',
+        jobId: jobId,
+        timestamp: new Date()
+      });
+
+      // Emit dashboard-stats-update for general analytics
+      io.emit('dashboard-stats-update', {
+        type: 'job_saved',
+        jobId: jobId,
+        userId: userId,
+        timestamp: new Date()
+      });
+
+      console.log(`📊 Analytics update events emitted for saved job ${jobId} by user ${userId}`);
+    }
+
     res.status(201).json({ success: true, data: savedJob });
   } catch (error) {
     console.error('❌ Error saving job:', error);
@@ -137,6 +165,28 @@ router.delete('/:jobId', authenticateToken, async (req: Request, res: Response) 
     });
 
     console.log('✅ Saved job removed successfully for user:', userId);
+
+    // 🚨 EMIT ANALYTICS UPDATE EVENTS FOR REAL-TIME DASHBOARD SYNC
+    const io = (req as any).io;
+    if (io) {
+      // Emit analytics-update event for student analytics dashboard
+      io.to(`user-${userId}`).emit('analytics-update', {
+        type: 'job_unsaved',
+        jobId: jobId,
+        timestamp: new Date()
+      });
+
+      // Emit dashboard-stats-update for general analytics
+      io.emit('dashboard-stats-update', {
+        type: 'job_unsaved',
+        jobId: jobId,
+        userId: userId,
+        timestamp: new Date()
+      });
+
+      console.log(`📊 Analytics update events emitted for unsaved job ${jobId} by user ${userId}`);
+    }
+
     res.json({ success: true, message: 'Job removed from saved list' });
   } catch (error: any) {
     console.error('❌ Error removing saved job:', error);

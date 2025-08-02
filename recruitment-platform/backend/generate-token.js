@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 
-const userId = '550e8400-e29b-41d4-a716-446655440000';
-const email = 'test@student.com';
+const userId = 'usr1';
+const email = 'student1@example.com';
 const role = 'STUDENT';
 
 const jwtSecret = 'recruitment-platform-jwt-secret-key-2024'; // Same as in .env
