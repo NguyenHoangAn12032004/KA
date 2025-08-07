@@ -31,30 +31,56 @@ router.get('/dashboard-stats', authenticateToken, async (req: AuthRequest, res) 
       totalUsers,
       totalJobs,
       totalApplications,
-      totalViews,
+      totalCompanies,
       activeJobs,
       pendingApplications,
-      companiesCount,
-      studentsCount
+      studentCount,
+      companyCount,
+      adminCount
     ] = await Promise.all([
-      prisma.user.count(),
-      prisma.job.count(),
-      prisma.application.count(),
-      prisma.jobView.count(),
-      prisma.job.count({ where: { isActive: true } }),
-      prisma.application.count({ where: { status: 'PENDING' } }),
-      prisma.user.count({ where: { role: 'COMPANY' } }),
-      prisma.user.count({ where: { role: 'STUDENT' } })
+      prisma.users.count(),
+      prisma.jobs.count(),
+      prisma.applications.count(),
+      prisma.company_profiles.count(),
+      prisma.jobs.count({ where: { isActive: true } }),
+      prisma.applications.count({ where: { 
+        OR: [
+          { status: 'PENDING' },
+          { status: 'REVIEWING' }
+        ]
+      }}),
+      prisma.users.count({ where: { role: 'STUDENT' } }),
+      prisma.users.count({ where: { role: 'COMPANY' } }),
+      prisma.users.count({ where: { role: 'ADMIN' } })
     ]);
 
-    // Get recent job views
-    const recentViews = await prisma.jobView.count({
-      where: {
-        viewedAt: {
-          gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) // Last 7 days
-        }
-      }
-    });
+    // Get weekly stats (last 7 days)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const [
+      weeklyNewRegistrations,
+      weeklyNewJobs,
+      weeklyNewApplications,
+      blockedAccounts
+    ] = await Promise.all([
+      prisma.users.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
+      prisma.jobs.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
+      prisma.applications.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
+      prisma.users.count({ where: { isActive: false } })
+    ]);
+
+    // Get monthly growth stats (last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const [
+      monthlyUsersGrowth,
+      monthlyJobsGrowth
+    ] = await Promise.all([
+      prisma.users.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
+      prisma.jobs.count({ where: { createdAt: { gte: thirtyDaysAgo } } })
+    ]);
 
     res.json({
       success: true,
@@ -62,12 +88,20 @@ router.get('/dashboard-stats', authenticateToken, async (req: AuthRequest, res) 
         totalUsers,
         totalJobs,
         totalApplications,
-        totalViews,
+        totalCompanies,
         activeJobs,
         pendingApplications,
-        companiesCount,
-        studentsCount,
-        recentViews,
+        usersGrowth: monthlyUsersGrowth,
+        jobsGrowth: monthlyJobsGrowth,
+        studentCount,
+        companyCount,
+        adminCount,
+        weeklyStats: {
+          newRegistrations: weeklyNewRegistrations,
+          newJobs: weeklyNewJobs,
+          newApplications: weeklyNewApplications,
+          blockedAccounts: blockedAccounts,
+        },
         lastUpdated: new Date().toISOString()
       }
     });
@@ -96,11 +130,11 @@ router.get('/personal', authenticateToken, async (req: AuthRequest, res) => {
       savedJobs,
       profileViews
     ] = await Promise.all([
-      prisma.application.count({ where: { studentId: userId } }),
-      prisma.jobView.count({ where: { userId } }),
-      prisma.savedJob.count({ where: { userId } }),
+      prisma.applications.count({ where: { studentId: userId } }),
+      prisma.job_views.count({ where: { userId } }),
+      prisma.saved_jobs.count({ where: { userId } }),
       // Profile views could be calculated from analytics or activity logs
-      prisma.activityLog.count({
+      prisma.activity_logs.count({
         where: {
           userId,
           activityType: 'PROFILE_VIEW'
@@ -109,14 +143,14 @@ router.get('/personal', authenticateToken, async (req: AuthRequest, res) => {
     ]);
 
     // Get application status breakdown
-    const applicationsByStatus = await prisma.application.groupBy({
+    const applicationsByStatus = await prisma.applications.groupBy({
       by: ['status'],
       where: { studentId: userId },
       _count: { status: true }
     });
 
     // Get recent activity
-    const recentApplications = await prisma.application.count({
+    const recentApplications = await prisma.applications.count({
       where: {
         studentId: userId,
         createdAt: {
@@ -159,7 +193,7 @@ router.get('/company/performance', authenticateToken, async (req: AuthRequest, r
     const companyId = req.user.companyId;
 
     // Get company's jobs
-    const companyJobs = await prisma.job.findMany({
+    const companyJobs = await prisma.jobs.findMany({
       where: { companyId },
       select: { id: true }
     });
@@ -174,11 +208,11 @@ router.get('/company/performance', authenticateToken, async (req: AuthRequest, r
       activeJobs,
       hiredCandidates
     ] = await Promise.all([
-      prisma.job.count({ where: { companyId } }),
-      prisma.application.count({ where: { jobId: { in: jobIds } } }),
-      prisma.jobView.count({ where: { jobId: { in: jobIds } } }),
-      prisma.job.count({ where: { companyId, isActive: true } }),
-      prisma.application.count({ 
+      prisma.jobs.count({ where: { companyId } }),
+      prisma.applications.count({ where: { jobId: { in: jobIds } } }),
+      prisma.job_views.count({ where: { jobId: { in: jobIds } } }),
+      prisma.jobs.count({ where: { companyId, isActive: true } }),
+      prisma.applications.count({ 
         where: { 
           jobId: { in: jobIds },
           status: 'ACCEPTED'
@@ -187,14 +221,14 @@ router.get('/company/performance', authenticateToken, async (req: AuthRequest, r
     ]);
 
     // Get applications by status
-    const applicationsByStatus = await prisma.application.groupBy({
+    const applicationsByStatus = await prisma.applications.groupBy({
       by: ['status'],
       where: { jobId: { in: jobIds } },
       _count: { status: true }
     });
 
     // Get recent performance (last 30 days)
-    const recentViews = await prisma.jobView.count({
+    const recentViews = await prisma.job_views.count({
       where: {
         jobId: { in: jobIds },
         viewedAt: {
@@ -203,7 +237,7 @@ router.get('/company/performance', authenticateToken, async (req: AuthRequest, r
       }
     });
 
-    const recentApplications = await prisma.application.count({
+    const recentApplications = await prisma.applications.count({
       where: {
         jobId: { in: jobIds },
         createdAt: {

@@ -1,6 +1,16 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "name": "Recruitment Platform - Hệ thống Tuyển dụng",
+  "short_name": "RecruitmentPro",
+  "description": "Hệ thống quản lý tuyển dụng và thực tập thời gian thực",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1976d2",
+  "orientation": "portrait-primary",
+  "categories": ["productivity", "business"],
+  "lang": "vi",
+  "dir": "ltr",
+  "scope": "/",
   "icons": [
     {
       "src": "favicon.ico",
@@ -10,16 +20,39 @@
     {
       "src": "logo192.png",
       "type": "image/png",
-      "sizes": "192x192"
+      "sizes": "192x192",
+      "purpose": "maskable any"
     },
     {
       "src": "logo512.png",
       "type": "image/png",
-      "sizes": "512x512"
+      "sizes": "512x512",
+      "purpose": "maskable any"
     }
   ],
-  "start_url": ".",
-  "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "shortcuts": [
+    {
+      "name": "Tìm việc làm",
+      "short_name": "Tìm việc",
+      "description": "Tìm kiếm công việc phù hợp",
+      "url": "/jobs",
+      "icons": [{ "src": "logo192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Dashboard",
+      "short_name": "Bảng điều khiển", 
+      "description": "Xem thống kê và hoạt động",
+      "url": "/dashboard",
+      "icons": [{ "src": "logo192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Hồ sơ",
+      "short_name": "Profile",
+      "description": "Quản lý thông tin cá nhân",
+      "url": "/profile",
+      "icons": [{ "src": "logo192.png", "sizes": "192x192" }]
+    }
+  ],
+  "related_applications": [],
+  "prefer_related_applications": false
 }

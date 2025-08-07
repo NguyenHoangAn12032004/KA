@@ -42,7 +42,7 @@ router.get('/stats', authenticateToken, async (req, res) => {
     }
 
     // Get company jobs statistics
-    const jobs = await prisma.job.findMany({
+    const jobs = await prisma.jobs.findMany({
       where: { companyId: companyProfile.id },
       include: {
         applications: {
@@ -53,7 +53,7 @@ router.get('/stats', authenticateToken, async (req, res) => {
         _count: {
           select: {
             applications: true,
-            jobViews: true
+            job_views: true
           }
         }
       }
@@ -63,18 +63,18 @@ router.get('/stats', authenticateToken, async (req, res) => {
     const totalJobs = jobs.length;
     const activeJobs = jobs.filter(job => job.isActive).length;
     
-    const totalApplications = jobs.reduce((sum, job) => sum + job._count.applications, 0);
-    const totalViews = jobs.reduce((sum, job) => sum + job._count.jobViews, 0);
+    const totalApplications = jobs.reduce((sum, job) => sum + (job._count?.applications || 0), 0);
+    const totalViews = jobs.reduce((sum, job) => sum + (job._count?.job_views || 0), 0);
     
     // Count interviews
     const interviewsScheduled = jobs.reduce((sum, job) => {
-      return sum + job.applications.reduce((intSum, app) => intSum + app.interviews.length, 0);
+      return sum + (job.applications || []).reduce((intSum, app) => intSum + (app.interviews?.length || 0), 0);
     }, 0);
 
     // Get recent applications for trending data
-    const recentApplications = await prisma.application.findMany({
+    const recentApplications = await prisma.applications.findMany({
       where: {
-        job: {
+        jobs: {
           companyId: companyProfile.id
         },
         appliedAt: {
@@ -84,9 +84,9 @@ router.get('/stats', authenticateToken, async (req, res) => {
     });
 
     // Get recent views (if job_views table exists)
-    const recentViews = await prisma.jobView.findMany({
+    const recentViews = await prisma.job_views.findMany({
       where: {
-        job: {
+        jobs: {
           companyId: companyProfile.id
         },
         viewedAt: {
@@ -147,19 +147,19 @@ router.get('/recent-applications', authenticateToken, async (req, res) => {
     }
 
     // Get recent applications with candidate details
-    const applications = await prisma.application.findMany({
+    const applications = await prisma.applications.findMany({
       where: {
-        job: {
+        jobs: {
           companyId: companyProfile.id
         }
       },
       include: {
-        student: {
+        users: {
           include: {
-            studentProfile: true
+            student_profiles: true
           }
         },
-        job: {
+        jobs: {
           select: {
             title: true
           }
@@ -174,12 +174,12 @@ router.get('/recent-applications', authenticateToken, async (req, res) => {
     // Transform data for frontend
     const transformedApplications = applications.map(app => ({
       id: app.id,
-      candidateName: `${app.student.studentProfile?.firstName || ''} ${app.student.studentProfile?.lastName || ''}`.trim() || 'Ứng viên',
-      candidateAvatar: app.student.studentProfile?.avatar || null,
-      jobTitle: app.job.title,
+      candidateName: `${app.users.student_profiles?.firstName || ''} ${app.users.student_profiles?.lastName || ''}`.trim() || 'Ứng viên',
+      candidateAvatar: app.users.student_profiles?.avatar || null,
+      jobTitle: app.jobs.title,
       appliedAt: app.appliedAt.toISOString(),
       status: app.status,
-      avatar: app.student.studentProfile?.firstName?.charAt(0)?.toUpperCase() || 'U',
+      avatar: app.users.student_profiles?.firstName?.charAt(0)?.toUpperCase() || 'U',
     }));
 
     res.json({
@@ -221,7 +221,7 @@ router.get('/performance', authenticateToken, async (req, res) => {
     }
 
     // Get jobs with detailed application data
-    const jobs = await prisma.job.findMany({
+    const jobs = await prisma.jobs.findMany({
       where: { companyId: companyProfile.id },
       include: {
         applications: {
@@ -232,22 +232,22 @@ router.get('/performance', authenticateToken, async (req, res) => {
         _count: {
           select: {
             applications: true,
-            jobViews: true
+            job_views: true
           }
         }
       }
     });
 
     // Calculate performance metrics
-    const totalViews = jobs.reduce((sum, job) => sum + job._count.jobViews, 0);
-    const totalApplications = jobs.reduce((sum, job) => sum + job._count.applications, 0);
+    const totalViews = jobs.reduce((sum, job) => sum + job._count?.job_views, 0);
+    const totalApplications = jobs.reduce((sum, job) => sum + job._count?.applications, 0);
     
     const totalInterviews = jobs.reduce((sum, job) => {
-      return sum + job.applications.reduce((intSum, app) => intSum + app.interviews.length, 0);
+      return sum + (job.applications || []).reduce((intSum, app) => intSum + (app.interviews?.length || 0), 0);
     }, 0);
 
     const acceptedApplications = jobs.reduce((sum, job) => {
-      return sum + job.applications.filter(app => app.status === 'ACCEPTED').length;
+      return sum + (job.applications || []).filter(app => app.status === 'ACCEPTED').length;
     }, 0);
 
     // Calculate rates (as percentages)
@@ -303,3 +303,6 @@ router.get('/performance', authenticateToken, async (req, res) => {
 });
 
 export default router;
+
+
+

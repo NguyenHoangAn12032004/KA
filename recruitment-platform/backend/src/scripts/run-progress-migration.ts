@@ -33,7 +33,7 @@ async function runMigration() {
     console.log('Migration completed successfully!');
     
     // Test the function with a sample student profile
-    const studentProfiles = await prisma.studentProfile.findMany({
+    const studentProfiles = await prisma.student_profiles.findMany({
       take: 1
     });
     

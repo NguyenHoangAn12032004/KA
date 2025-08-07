@@ -7,7 +7,7 @@ const router = Router();
 // Get all users (admin only)
 router.get('/', async (req, res) => {
   try {
-    const users = await prisma.user.findMany({
+    const users = await prisma.users.findMany({
       select: {
         id: true,
         email: true,
@@ -43,16 +43,16 @@ router.get('/profile', authenticateToken, async (req: any, res) => {
       });
     }
 
-    const user = await prisma.user.findUnique({
+    const user = await prisma.users.findUnique({
       where: { id: userId },
       include: {
-        studentProfile: {
+        student_profiles: {
           include: {
-            educations: true,
-            workExperiences: true,
-            projects: true,
-            languages: true,
-            certifications: true
+            student_educations: true,
+            student_experiences: true,
+            student_projects: true,
+            student_languages: true,
+            student_certifications: true
           }
         },
         company_profiles: true
@@ -67,19 +67,21 @@ router.get('/profile', authenticateToken, async (req: any, res) => {
     }
 
     // Nếu không có studentProfile, tạo một profile trống
-    if (user.role === 'STUDENT' && !user.studentProfile) {
+    if (user.role === 'STUDENT' && !user.student_profiles) {
       console.log('🆕 Creating empty student profile for user:', userId);
-      const newProfile = await prisma.studentProfile.create({
+      const newProfile = await prisma.student_profiles.create({
         data: {
+          id: `student-profile-${Date.now()}`,
           userId,
           firstName: 'Sinh viên',
           lastName: 'Demo',
-          skills: ['React', 'TypeScript', 'Node.js'] // Default skills
+          skills: ['React', 'TypeScript', 'Node.js'], // Default skills
+          updatedAt: new Date()
         }
       });
       
       // Thêm profile mới vào user với type assertion để tránh lỗi TypeScript
-      user.studentProfile = {
+      user.student_profiles = {
         ...newProfile,
         educations: [],
         workExperiences: [],
@@ -115,7 +117,7 @@ router.put('/profile', authenticateToken, async (req: any, res) => {
     }
 
     // Simple update implementation
-    const updatedUser = await prisma.user.update({
+    const updatedUser = await prisma.users.update({
       where: { id: userId },
       data: {
         updatedAt: new Date()

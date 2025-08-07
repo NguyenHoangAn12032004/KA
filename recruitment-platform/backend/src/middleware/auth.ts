@@ -1,17 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
+import { AuthRequest, UserRole } from '../types';
 
 const prisma = new PrismaClient();
-
-interface AuthRequest extends Request {
-  user?: {
-    id: string;
-    email: string;
-    role: string;
-    companyId?: string;
-  };
-}
 
 export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -48,7 +40,7 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
     }
 
     // Get user from database with company profile
-    const user = await prisma.user.findUnique({
+    const user = await prisma.users.findUnique({
       where: { id: userId },
       include: {
         company_profiles: true
@@ -72,8 +64,10 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
     req.user = {
       id: user.id,
       email: user.email,
-      role: user.role,
-      companyId: user.company_profiles?.id
+      role: user.role as UserRole,
+      companyId: user.company_profiles?.id,
+      isActive: user.isActive,
+      isVerified: user.isVerified
     };
 
     console.log('👤 User set in request:', {
@@ -109,7 +103,7 @@ export const requireRole = (roles: string[]) => {
       console.log('❌ Company ID required but not found for user:', req.user);
       return res.status(403).json({ 
         error: 'Company profile required',
-        user: {
+        users: {
           id: req.user.id,
           role: req.user.role
         }

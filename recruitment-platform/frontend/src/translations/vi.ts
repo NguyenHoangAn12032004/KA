@@ -126,5 +126,17 @@ export default {
     fetchJobs: 'Không thể tải danh sách công việc',
     submitApplication: 'Không thể nộp đơn ứng tuyển',
     loginRequired: 'Vui lòng đăng nhập để thực hiện chức năng này'
+  },
+  chatbot: {
+    title: 'Trợ lý AI Tuyển dụng',
+    subtitle: 'Hỗ trợ tìm việc và tư vấn nghề nghiệp 24/7',
+    placeholder: 'Nhập tin nhắn của bạn...',
+    typing: 'Đang trả lời...',
+    sendButton: 'Gửi',
+    quickSuggestions: 'Câu hỏi gợi ý:',
+    helpText: 'Nhấn Enter để gửi tin nhắn, Shift + Enter để xuống dòng',
+    errorConnect: 'Không thể kết nối với chatbot. Vui lòng thử lại sau.',
+    errorLogin: 'Vui lòng đăng nhập để sử dụng chatbot',
+    errorRateLimit: 'Bạn đã gửi quá nhiều tin nhắn. Vui lòng thử lại sau.'
   }
 }; 

@@ -430,11 +430,11 @@ const ModernJobsPage: React.FC = () => {
 
     try {
       // Check if socket is already connected to avoid duplicate connections
-      if (!socketService.isConnected()) {
+      if (!socketService.isConnected) {
         socketService.connect(localStorage.getItem('token')!);
         
         // Only join room if connection is successful
-        if (socketService.isConnected()) {
+        if (socketService.isConnected) {
           socketService.joinJobRoom('all-jobs');
         }
       }
@@ -458,7 +458,7 @@ const ModernJobsPage: React.FC = () => {
         socketService.off('job-updated');
         
         // Only disconnect if we're the ones who connected
-        if (socketService.isConnected()) {
+        if (socketService.isConnected) {
           socketService.disconnect();
         }
       };

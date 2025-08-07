@@ -13,7 +13,7 @@ import fs from 'fs';
 // Import routes
 import authRoutes from './routes/auth';
 import usersRoutes from './routes/users';
-import usersEnhancedRoutes from './routes/users-enhanced';
+// import usersEnhancedRoutes from './routes/users-enhanced';
 import usersSimpleRoutes from './routes/users-simple';
 import jobsRoutes from './routes/jobs';
 import companiesRoutes from './routes/companies';
@@ -22,6 +22,7 @@ import uploadRoutes from './routes/upload';
 import savedJobsRoutes from './routes/savedJobs';
 import analyticsRoutes from './routes/analytics';
 import studentDashboardRoutes from './routes/studentDashboard';
+import notificationsRoutes from './routes/notifications';
 
 // Import middleware
 import { errorHandler } from './middleware/errorHandler';
@@ -205,7 +206,7 @@ console.log('✅ API Health route registered');
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
-app.use('/api/users-enhanced', usersEnhancedRoutes);
+// app.use('/api/users-enhanced', usersEnhancedRoutes);
 app.use('/api/users-simple', usersSimpleRoutes);
 app.use('/api/jobs', jobsRoutes);
 app.use('/api/companies', companiesRoutes);
@@ -214,6 +215,7 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/saved-jobs', savedJobsRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/student-dashboard', studentDashboardRoutes);
+app.use('/api/notifications', notificationsRoutes);
 
 // Socket.IO instance available to routes
 app.set('io', io);

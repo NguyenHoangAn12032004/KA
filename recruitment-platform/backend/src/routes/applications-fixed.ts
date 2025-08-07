@@ -55,7 +55,7 @@ router.post('/', authenticateToken, requireRole(['STUDENT']), async (req: Reques
     }
 
     // Check if job exists
-    const job = await prisma.job.findUnique({ where: { id: jobId } });
+    const job = await prisma.jobs.findUnique({ where: { id: jobId } });
     if (!job) {
       console.log(`❌ Job not found: ${jobId}`);
       return res.status(404).json({ message: 'Job not found' });
@@ -64,7 +64,7 @@ router.post('/', authenticateToken, requireRole(['STUDENT']), async (req: Reques
     console.log(`✅ Job found: ${job.title} (Company: ${job.companyId})`);
 
     // Check if user already applied
-    const existingApp = await prisma.application.findFirst({
+    const existingApp = await prisma.applications.findFirst({
       where: { studentId: userId, jobId }
     });
 
@@ -76,12 +76,14 @@ router.post('/', authenticateToken, requireRole(['STUDENT']), async (req: Reques
     console.log(`📝 Creating application for user ${userId} -> job ${jobId}`);
 
     // Create application
-    const application = await prisma.application.create({
+    const application = await prisma.applications.create({
       data: {
+        id: `app_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         studentId: userId,
         jobId,
         coverLetter: coverLetter || '',
-        status: 'PENDING'
+        status: 'PENDING',
+        updatedAt: new Date()
       }
     });
 
@@ -125,7 +127,7 @@ router.post('/', authenticateToken, requireRole(['STUDENT']), async (req: Reques
 
     res.status(201).json({
       message: 'Application submitted successfully',
-      application: {
+      applications: {
         id: application.id,
         status: application.status,
         createdAt: application.createdAt
@@ -146,10 +148,10 @@ router.get('/student', authenticateToken, requireRole(['STUDENT']), async (req: 
       return res.status(400).json({ message: 'User ID required' });
     }
 
-    const applications = await prisma.application.findMany({
+    const applications = await prisma.applications.findMany({
       where: { studentId: userId },
       include: {
-        job: {
+        jobs: {
           include: { company_profiles: true }
         }
       },
@@ -163,12 +165,12 @@ router.get('/student', authenticateToken, requireRole(['STUDENT']), async (req: 
       customResume: app.customResume,
       createdAt: app.createdAt,
       updatedAt: app.updatedAt,
-      job: {
-        id: app.job.id,
-        title: app.job.title,
+      jobs: {
+        id: app.jobs.id,
+        title: app.jobs.title,
         company: {
-          id: app.job.company_profiles?.id,
-          companyName: app.job.company_profiles?.companyName
+          id: app.jobs.company_profiles?.id,
+          companyName: app.jobs.company_profiles?.companyName
         }
       }
     }));
@@ -191,7 +193,7 @@ router.get('/:jobId', requireRole(['COMPANY']), async (req: Request, res: Respon
     }
 
     // Verify job belongs to company
-    const job = await prisma.job.findFirst({
+    const job = await prisma.jobs.findFirst({
       where: { id: jobId, companyId }
     });
 
@@ -199,18 +201,18 @@ router.get('/:jobId', requireRole(['COMPANY']), async (req: Request, res: Respon
       return res.status(404).json({ message: 'Job not found or access denied' });
     }
 
-    const applications = await prisma.application.findMany({
+    const applications = await prisma.applications.findMany({
       where: { jobId },
       include: {
-        student: {
-          include: { studentProfile: true }
+        users: {
+          include: { student_profiles: true }
         }
       },
       orderBy: { createdAt: 'desc' }
     });
 
     res.json({
-      job: {
+      jobs: {
         id: job.id,
         title: job.title
       },
@@ -220,16 +222,16 @@ router.get('/:jobId', requireRole(['COMPANY']), async (req: Request, res: Respon
         coverLetter: app.coverLetter,
         customResume: app.customResume,
         createdAt: app.createdAt,
-        student: {
-          id: app.student.id,
-          email: app.student.email,
-          profile: app.student.studentProfile ? {
-            firstName: app.student.studentProfile.firstName,
-            lastName: app.student.studentProfile.lastName,
-            university: app.student.studentProfile.university,
-            major: app.student.studentProfile.major,
-            graduationYear: app.student.studentProfile.graduationYear,
-            skills: app.student.studentProfile.skills
+        users: {
+          id: app.users.id,
+          email: app.users.email,
+          profile: app.users.student_profiles ? {
+            firstName: app.users.student_profiles.firstName,
+            lastName: app.users.student_profiles.lastName,
+            university: app.users.student_profiles.university,
+            major: app.users.student_profiles.major,
+            graduationYear: app.users.student_profiles.graduationYear,
+            skills: app.users.student_profiles.skills
           } : null
         }
       }))
@@ -255,7 +257,7 @@ router.post('/:jobId/resume', authenticateToken, requireRole(['STUDENT']), uploa
       return res.status(400).json({ message: 'Resume file is required' });
     }
 
-    const application = await prisma.application.findFirst({
+    const application = await prisma.applications.findFirst({
       where: { studentId: userId, jobId }
     });
 
@@ -266,7 +268,7 @@ router.post('/:jobId/resume', authenticateToken, requireRole(['STUDENT']), uploa
 
     const relativePath = path.relative(process.cwd(), file.path);
 
-    await prisma.application.update({
+    await prisma.applications.update({
       where: { id: application.id },
       data: { customResume: relativePath }
     });
@@ -296,7 +298,7 @@ router.post('/:applicationId/resume', authenticateToken, requireRole(['STUDENT']
       return res.status(400).json({ message: 'Resume file is required' });
     }
 
-    const application = await prisma.application.findFirst({
+    const application = await prisma.applications.findFirst({
       where: { id: applicationId, studentId: userId }
     });
 
@@ -307,7 +309,7 @@ router.post('/:applicationId/resume', authenticateToken, requireRole(['STUDENT']
 
     const relativePath = path.relative(process.cwd(), file.path);
 
-    await prisma.application.update({
+    await prisma.applications.update({
       where: { id: application.id },
       data: { customResume: relativePath }
     });
@@ -338,13 +340,13 @@ router.put('/:id/status', requireRole(['COMPANY']), async (req: Request, res: Re
       return res.status(400).json({ message: 'Invalid status' });
     }
 
-    const application = await prisma.application.findFirst({
+    const application = await prisma.applications.findFirst({
       where: {
         id,
-        job: { companyId }
+        jobs: { companyId }
       },
       include: {
-        job: { include: { company_profiles: true } }
+        jobs: { include: { company_profiles: true } }
       }
     });
 
@@ -352,7 +354,7 @@ router.put('/:id/status', requireRole(['COMPANY']), async (req: Request, res: Re
       return res.status(404).json({ message: 'Application not found or access denied' });
     }
 
-    const updatedApp = await prisma.application.update({
+    const updatedApp = await prisma.applications.update({
       where: { id },
       data: { status }
     });
@@ -362,8 +364,8 @@ router.put('/:id/status', requireRole(['COMPANY']), async (req: Request, res: Re
     if (io) {
       io.to(`user-${application.studentId}`).emit('application-status-update', {
         applicationId: id,
-        jobTitle: application.job.title,
-        companyName: application.job.company_profiles?.companyName,
+        jobTitle: application.jobs.title,
+        companyName: application.jobs.company_profiles?.companyName,
         status,
         timestamp: new Date()
       });
@@ -373,21 +375,21 @@ router.put('/:id/status', requireRole(['COMPANY']), async (req: Request, res: Re
         applicationId: id,
         status,
         jobId: application.jobId,
-        companyId: application.job.companyId,
+        companyId: application.jobs.companyId,
         studentId: application.studentId,
         timestamp: new Date()
       });
 
       // Company-specific stats refresh
-      io.to(`company-${application.job.companyId}`).emit('refresh-company-stats', {
-        companyId: application.job.companyId,
+      io.to(`company-${application.jobs.companyId}`).emit('refresh-company-stats', {
+        companyId: application.jobs.companyId,
         timestamp: new Date()
       });
     }
 
     res.json({
       message: 'Application status updated successfully',
-      application: {
+      applications: {
         id: updatedApp.id,
         status: updatedApp.status
       }
@@ -399,3 +401,5 @@ router.put('/:id/status', requireRole(['COMPANY']), async (req: Request, res: Re
 });
 
 export default router;
+
+

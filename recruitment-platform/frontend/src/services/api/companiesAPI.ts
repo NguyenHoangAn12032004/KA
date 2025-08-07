@@ -208,12 +208,24 @@ const companiesAPI = {
 
   // Legacy methods (kept for backward compatibility)
   getProfile: async () => {
-    const response = await axios.get(`${API_URL}/api/companies/profile`);
+    const token = localStorage.getItem('token');
+    const response = await axios.get(`${API_URL}/api/companies/profile?_t=${Date.now()}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      }
+    });
     return response.data;
   },
 
   updateProfile: async (data: any) => {
-    const response = await axios.put(`${API_URL}/api/companies/profile`, data);
+    const token = localStorage.getItem('token');
+    const response = await axios.put(`${API_URL}/api/companies/profile`, data, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
     return response.data;
   },
 

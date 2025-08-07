@@ -297,6 +297,7 @@ const CandidatesPage: React.FC = () => {
   }, []);
 
   const handleRealTimeUpdate = useCallback((data: any) => {
+    console.log('🔄 Real-time application status update:', data);
     setCandidates(prev => prev.map(candidate => 
       candidate.id === data.applicationId 
         ? { ...candidate, status: data.status, updatedAt: new Date().toISOString() }
@@ -310,11 +311,14 @@ const CandidatesPage: React.FC = () => {
   }, []);
 
   const handleNewApplication = useCallback((data: any) => {
-    loadCandidates();
+    console.log('📝 Real-time new application received:', data);
+    // Refresh candidates list to include new application
     setNotification({
       type: 'success',
-      message: 'Có ứng viên mới ứng tuyển!'
+      message: `Có ứng viên mới ứng tuyển vào vị trí: ${data.jobTitle || 'Không xác định'}`
     });
+    // Force refresh by setting a flag or directly calling API
+    setRefreshing(true);
   }, []);
 
   const debouncedSearch = useMemo(
@@ -323,6 +327,77 @@ const CandidatesPage: React.FC = () => {
     }, 300),
     []
   );
+
+  const loadCandidates = async () => {
+    try {
+      setLoading(true);
+      const response = await applicationsAPI.getAll();
+      
+      // Kiểm tra cấu trúc dữ liệu trả về
+      console.log('API response:', response);
+      
+      // Đảm bảo dữ liệu là mảng
+      const candidatesData = response.data?.data || [];
+      
+      if (Array.isArray(candidatesData)) {
+        // Debug: Log first candidate to check structure
+        if (candidatesData.length > 0) {
+          console.log('🔍 First candidate structure:', candidatesData[0]);
+        }
+        
+        // Transform data to match interface
+        const transformedData = candidatesData.map((item: any) => ({
+          id: item.id,
+          studentId: item.studentId,
+          jobId: item.jobId,
+          jobTitle: item.jobs?.title || 'Không xác định',
+          status: item.status,
+          appliedAt: item.createdAt,
+          updatedAt: item.updatedAt,
+          student: {
+            id: item.users?.id || '',
+            firstName: item.users?.student_profiles?.firstName || 'Chưa cập nhật',
+            lastName: item.users?.student_profiles?.lastName || '',
+            email: item.users?.email || '',
+            phone: item.users?.student_profiles?.phone,
+            university: item.users?.student_profiles?.university,
+            major: item.users?.student_profiles?.major,
+            graduationYear: item.users?.student_profiles?.graduationYear,
+            avatar: item.users?.student_profiles?.avatar,
+            skills: item.users?.student_profiles?.skills || [],
+            experience: item.users?.student_profiles?.experience
+          }
+        }));
+        
+        setCandidates(transformedData);
+        
+        // Lấy danh sách job duy nhất  
+        const uniqueJobs = Array.from(new Set(transformedData.map((c: Candidate) => c.jobId)))
+          .map(jobId => {
+            const job = transformedData.find((c: Candidate) => c.jobId === jobId);
+            return {
+              id: String(jobId),
+              title: job?.jobTitle || 'Không xác định'
+            };
+          });
+        setJobsList(uniqueJobs);
+      } else {
+        console.error('Dữ liệu không phải là mảng:', candidatesData);
+        setCandidates([]);
+        setJobsList([]);
+      }
+    } catch (error) {
+      console.error("Error loading candidates:", error);
+      setCandidates([]);
+      setJobsList([]);
+      setNotification({
+        type: 'error',
+        message: 'Không thể tải danh sách ứng viên'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -333,6 +408,13 @@ const CandidatesPage: React.FC = () => {
   useEffect(() => {
     loadCandidates();
   }, []);
+
+  // Handle refreshing triggered by real-time events
+  useEffect(() => {
+    if (refreshing) {
+      loadCandidates().finally(() => setRefreshing(false));
+    }
+  }, [refreshing]);
 
   useEffect(() => {
     // Đảm bảo candidates là mảng
@@ -380,52 +462,6 @@ const CandidatesPage: React.FC = () => {
     
     setFilteredCandidates(result);
   }, [candidates, searchTerm, statusFilter, jobFilter, sortBy]);
-
-  const loadCandidates = async () => {
-    try {
-      setLoading(true);
-      const response = await applicationsAPI.getAll();
-      
-      // Kiểm tra cấu trúc dữ liệu trả về
-      console.log('API response:', response);
-      
-      // Đảm bảo dữ liệu là mảng
-      const candidatesData = response.data?.data || [];
-      
-      if (Array.isArray(candidatesData)) {
-        // Debug: Log first candidate to check structure
-        if (candidatesData.length > 0) {
-          console.log('🔍 First candidate structure:', candidatesData[0]);
-        }
-        setCandidates(candidatesData);
-        
-        // Lấy danh sách job duy nhất
-        const uniqueJobs = Array.from(new Set(candidatesData.map((c: Candidate) => c.jobId)))
-          .map(jobId => {
-            const job = candidatesData.find((c: Candidate) => c.jobId === jobId);
-            return {
-              id: String(jobId),
-              title: job?.jobTitle || 'Không xác định'
-            };
-          });
-        setJobsList(uniqueJobs);
-      } else {
-        console.error('Dữ liệu không phải là mảng:', candidatesData);
-        setCandidates([]);
-        setJobsList([]);
-      }
-    } catch (error) {
-      console.error("Error loading candidates:", error);
-      setCandidates([]);
-      setJobsList([]);
-      setNotification({
-        type: 'error',
-        message: 'Không thể tải danh sách ứng viên'
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleMenuClick = (event: React.MouseEvent<HTMLElement>, candidate: Candidate) => {
     setAnchorEl(event.currentTarget);

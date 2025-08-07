@@ -54,25 +54,75 @@ export async function trackAnalyticsEvent(metric: string, userId?: string, jobId
 // Dashboard stats endpoint
 router.get('/dashboard-stats', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const totalUsers = await prisma.user.count();
-    const totalJobs = await prisma.job.count();
-    const totalApplications = await prisma.application.count();
+    const totalUsers = await prisma.users.count();
+    const totalJobs = await prisma.jobs.count();
+    const totalApplications = await prisma.applications.count();
     const totalCompanies = await prisma.company_profiles.count();
     
     // Get 30 days data
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
-    const recentUsers = await prisma.user.count({
+    // Get 7 days data for weekly stats
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    
+    const recentUsers = await prisma.users.count({
       where: { createdAt: { gte: thirtyDaysAgo } }
     });
     
-    const recentJobs = await prisma.job.count({
+    const recentJobs = await prisma.jobs.count({
       where: { createdAt: { gte: thirtyDaysAgo } }
     });
     
-    const recentApplications = await prisma.application.count({
+    const recentApplications = await prisma.applications.count({
       where: { createdAt: { gte: thirtyDaysAgo } }
+    });
+
+    // Weekly stats
+    const weeklyNewRegistrations = await prisma.users.count({
+      where: { createdAt: { gte: sevenDaysAgo } }
+    });
+
+    const weeklyNewJobs = await prisma.jobs.count({
+      where: { createdAt: { gte: sevenDaysAgo } }
+    });
+
+    const weeklyNewApplications = await prisma.applications.count({
+      where: { createdAt: { gte: sevenDaysAgo } }
+    });
+
+    // Count blocked accounts (suspended users)
+    const blockedAccounts = await prisma.users.count({
+      where: { isActive: false }
+    });
+
+    // Count active jobs
+    const activeJobs = await prisma.jobs.count({
+      where: { isActive: true }
+    });
+
+    // Count pending applications (if you have status field)
+    const pendingApplications = await prisma.applications.count({
+      where: { 
+        OR: [
+          { status: 'PENDING' },
+          { status: 'REVIEWING' }
+        ]
+      }
+    });
+
+    // Count users by role
+    const studentCount = await prisma.users.count({
+      where: { role: 'STUDENT' }
+    });
+
+    const companyCount = await prisma.users.count({
+      where: { role: 'COMPANY' }
+    });
+
+    const adminCount = await prisma.users.count({
+      where: { role: 'ADMIN' }
     });
 
     res.json({
@@ -82,9 +132,19 @@ router.get('/dashboard-stats', authenticateToken, async (req: AuthRequest, res) 
         totalJobs,
         totalApplications,
         totalCompanies,
-        recentUsers,
-        recentJobs,
-        recentApplications,
+        activeJobs,
+        pendingApplications,
+        usersGrowth: recentUsers,
+        jobsGrowth: recentJobs,
+        studentCount,
+        companyCount,
+        adminCount,
+        weeklyStats: {
+          newRegistrations: weeklyNewRegistrations,
+          newJobs: weeklyNewJobs,
+          newApplications: weeklyNewApplications,
+          blockedAccounts: blockedAccounts,
+        },
         growthMetrics: {
           userGrowth: recentUsers,
           jobGrowth: recentJobs,
@@ -135,7 +195,7 @@ router.get('/personal', authenticateToken, async (req: AuthRequest, res) => {
     }, {} as Record<string, number>);
 
     // Get actual counts from database
-    const applicationsCount = await prisma.application.count({
+    const applicationsCount = await prisma.applications.count({
       where: { 
         studentId: userId,
         createdAt: { gte: thirtyDaysAgo }
@@ -215,7 +275,7 @@ router.get('/company/performance', authenticateToken, requireRole(['COMPANY', 'H
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     // Get company jobs with applications and interviews
-    const jobs = await prisma.job.findMany({
+    const jobs = await prisma.jobs.findMany({
       where: { companyId: companyId },
       include: {
         applications: {

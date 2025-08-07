@@ -7,6 +7,15 @@ import { logger } from '../utils/logger';
 const router = Router();
 const prisma = new PrismaClient();
 
+// Add logging to see if this route file is being loaded
+console.log('🏢 Companies route file loaded');
+
+// Simple test route to verify router is working
+router.get('/test', (req: Request, res: Response) => {
+  console.log('🔧 Companies test route hit!');
+  res.json({ message: 'Companies router is working!' });
+});
+
 // Enhanced company interface for frontend
 interface EnhancedCompany {
   id: string;
@@ -229,6 +238,147 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/companies/profile - Get current company profile (authenticated)
+// GET /api/companies/profile - Get company profile for authenticated user
+router.get('/profile', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    console.log('🏢 GET /api/companies/profile - Processing request for user:', req.user?.id);
+    const userId = req.user!.id;
+    console.log('🏢 Searching for company profile with userId:', userId);
+
+    // Get company profile for the current user
+    const company = await prisma.company_profiles.findUnique({
+      where: { userId },
+      include: {
+        jobs: {
+          where: { isActive: true },
+          include: {
+            applications: {
+              select: {
+                id: true,
+                status: true,
+                appliedAt: true
+              }
+            },
+            _count: {
+              select: {
+                applications: true,
+                job_views: true
+              }
+            }
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 10
+        },
+        users: {
+          select: {
+            id: true,
+            email: true,
+            isActive: true,
+            lastLogin: true
+          }
+        }
+      }
+    });
+
+    console.log('🏢 Company profile query result:', company ? 'Found' : 'Not found');
+    console.log('🏢 Company data:', company ? JSON.stringify({ id: company.id, companyName: company.companyName, userId: company.userId }, null, 2) : 'null');
+
+    if (!company) {
+      return res.status(404).json({
+        success: false,
+        error: 'Company profile not found'
+      });
+    }
+
+    // Get enhanced statistics
+    const jobStats = await getCompanyJobStats(company.id);
+    const viewStats = await getCompanyViewStats(company.id);
+    const applicationStats = await getCompanyApplicationStats(company.id);
+
+    // Get follower count
+    const followerCount = await prisma.activity_logs.count({
+      where: {
+        activityType: 'FOLLOW_COMPANY',
+        entityId: company.id
+      }
+    });
+
+    // Transform to enhanced format
+    const profileData = {
+      id: company.id,
+      companyName: company.companyName,
+      description: company.description,
+      industry: company.industry,
+      companySize: company.companySize,
+      foundedYear: company.founded ? parseInt(company.founded) : undefined,
+      location: `${company.city || ''}, ${company.country || ''}`.trim().replace(/^,\s*|,\s*$/, ''),
+      website: company.website,
+      email: company.users?.email || '',
+      phone: company.phone,
+      logoUrl: company.logo,
+      isVerified: company.isVerified,
+      rating: company.rating || 4.5,
+      stats: {
+        totalJobs: jobStats.totalJobs,
+        activeJobs: jobStats.activeJobs,
+        totalApplications: jobStats.totalApplications,
+        totalViews: viewStats.total,
+        followers: followerCount,
+        successfulHires: Math.floor(jobStats.totalApplications * 0.15), // Estimate
+        averageRating: company.rating || 4.5,
+        responseRate: 87, // Default value
+        hireTime: 12, // Default value in days
+      },
+      socialLinks: {
+        linkedin: company.linkedin,
+        facebook: company.facebook,
+        twitter: company.twitter,
+        instagram: null,
+        youtube: null,
+        github: null,
+      },
+      culture: {
+        workEnvironment: company.description || null,
+        coreValues: null,
+        benefits: null,
+        growth: null,
+      },
+      recentJobs: company.jobs.map(job => ({
+        id: job.id,
+        title: job.title,
+        location: job.location,
+        type: 'Full-time', // Default value since type field doesn't exist
+        isActive: job.isActive,
+        applicationsCount: job._count.applications,
+        createdAt: job.createdAt,
+      })),
+    };
+
+    console.log('🏢 Sending response data structure:', JSON.stringify({
+      stats: profileData.stats,
+      location: profileData.location,
+      phone: profileData.phone,
+      website: profileData.website,
+      logoUrl: profileData.logoUrl
+    }, null, 2));
+
+    res.json({
+      success: true,
+      data: profileData
+    });
+
+    logger.info(`👤 Company profile fetched for user: ${userId}`);
+
+  } catch (error) {
+    logger.error('Error fetching company profile:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
+});
+
 // GET /api/companies/:id - Get detailed company information
 router.get('/:id', async (req: Request, res: Response) => {
   try {
@@ -251,7 +401,7 @@ router.get('/:id', async (req: Request, res: Response) => {
             _count: {
               select: {
                 applications: true,
-                jobViews: true
+                job_views: true
               }
             }
           },
@@ -351,7 +501,7 @@ router.post('/:id/follow', authenticateToken, async (req: AuthRequest, res: Resp
     }
 
     // For now, we'll store in activity logs until we create a followers table
-    const existingFollow = await prisma.activityLog.findFirst({
+    const existingFollow = await prisma.activity_logs.findFirst({
       where: {
         userId,
         activityType: 'FOLLOW_COMPANY',
@@ -362,7 +512,7 @@ router.post('/:id/follow', authenticateToken, async (req: AuthRequest, res: Resp
 
     if (existingFollow) {
       // Unfollow
-      await prisma.activityLog.delete({
+      await prisma.activity_logs.delete({
         where: { id: existingFollow.id }
       });
 
@@ -385,12 +535,14 @@ router.post('/:id/follow', authenticateToken, async (req: AuthRequest, res: Resp
       });
     } else {
       // Follow
-      await prisma.activityLog.create({
+      await prisma.activity_logs.create({
         data: {
+          id: `activity-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           userId,
           activityType: 'FOLLOW_COMPANY',
           entityType: 'COMPANY',
           entityId: companyId,
+          updatedAt: new Date(),
           data: {
             companyName: company.companyName,
             action: 'follow'
@@ -436,12 +588,14 @@ router.post('/:id/view', async (req: Request, res: Response) => {
     const { userId, ipAddress, userAgent } = req.body;
 
     // Track the view in activity logs
-    await prisma.activityLog.create({
+    await prisma.activity_logs.create({
       data: {
+        id: `activity-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         userId: userId || undefined,
         activityType: 'VIEW_COMPANY',
         entityType: 'COMPANY',
         entityId: companyId,
+        updatedAt: new Date(),
         data: {
           ipAddress,
           userAgent,
@@ -499,7 +653,7 @@ router.get('/stats/overview', authenticateToken, requireRole(['ADMIN']), async (
 
 // Helper Functions
 async function getCompanyJobStats(companyId: string) {
-  const jobs = await prisma.job.findMany({
+  const jobs = await prisma.jobs.findMany({
     where: { companyId },
     include: {
       applications: {
@@ -511,7 +665,7 @@ async function getCompanyJobStats(companyId: string) {
       _count: {
         select: {
           applications: true,
-          jobViews: true
+          job_views: true
         }
       }
     }
@@ -519,7 +673,7 @@ async function getCompanyJobStats(companyId: string) {
 
   const activeJobs = jobs.filter(job => job.isActive).length;
   const totalApplications = jobs.reduce((sum, job) => sum + job._count.applications, 0);
-  const totalViews = jobs.reduce((sum, job) => sum + job._count.jobViews, 0);
+  const totalViews = jobs.reduce((sum, job) => sum + job._count.job_views, 0);
 
   return {
     totalJobs: jobs.length,
@@ -531,7 +685,7 @@ async function getCompanyJobStats(companyId: string) {
 }
 
 async function getCompanyViewStats(companyId: string) {
-  const views = await prisma.activityLog.findMany({
+  const views = await prisma.activity_logs.findMany({
     where: {
       activityType: 'VIEW_COMPANY',
       entityId: companyId
@@ -551,14 +705,14 @@ async function getCompanyViewStats(companyId: string) {
 }
 
 async function getCompanyApplicationStats(companyId: string) {
-  const applications = await prisma.application.findMany({
+  const applications = await prisma.applications.findMany({
     where: {
-      job: {
+      jobs: {
         companyId
       }
     },
     include: {
-      job: {
+      jobs: {
         select: {
           title: true
         }
@@ -643,5 +797,58 @@ async function getAvailableLocations() {
   });
   return locations.map(item => item.city).filter(Boolean);
 }
+
+// PUT /api/companies/profile - Update current company profile (authenticated)
+router.put('/profile', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const updateData = req.body;
+
+    // Update company profile
+    const updatedCompany = await prisma.company_profiles.update({
+      where: { userId },
+      data: {
+        companyName: updateData.companyName,
+        description: updateData.description,
+        industry: updateData.industry,
+        companySize: updateData.companySize,
+        founded: updateData.foundedYear?.toString(),
+        website: updateData.website,
+        phone: updateData.phone,
+        city: updateData.location?.split(',')[0]?.trim(),
+        country: updateData.location?.split(',')[1]?.trim() || 'Vietnam',
+        linkedin: updateData.socialLinks?.linkedin,
+        facebook: updateData.socialLinks?.facebook,
+        twitter: updateData.socialLinks?.twitter,
+        updatedAt: new Date(),
+      },
+    });
+
+    // Emit real-time update
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('company-profile-updated', {
+        companyId: updatedCompany.id,
+        userId,
+        timestamp: new Date()
+      });
+    }
+
+    res.json({
+      success: true,
+      data: updatedCompany,
+      message: 'Company profile updated successfully'
+    });
+
+    logger.info(`✏️ Company profile updated for user: ${userId}`);
+
+  } catch (error) {
+    logger.error('Error updating company profile:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
+});
 
 export default router;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { styled } from '@mui/material/styles';
 import {
   Box,
@@ -105,6 +105,7 @@ import { usersAPI } from "../services/api";
 import { toast } from "react-toastify";
 import { API_URL } from "../config";
 import CVTemplate from "./CVTemplate";
+import socketService from "../services/socketService";
 
 const GridContainer = styled(Box)(({ theme }) => ({
   display: 'grid',
@@ -618,6 +619,63 @@ const StudentProfile: React.FC = () => {
     
     setLoading(true);
     
+    // Setup socket connection for realtime profile updates
+    const token = localStorage.getItem('token');
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    
+    if (token && user?.id && socketService) {
+      console.log('🔌 Setting up socket for profile realtime updates');
+      
+      try {
+        socketService.connect(token);
+        
+        // Join user-specific room for profile updates
+        socketService.joinUserRoom(user.id);
+        
+        // Listen for profile update events
+        socketService.on('profile-updated', (profileUpdateData: any) => {
+          console.log('🔄 Realtime profile update received:', profileUpdateData);
+          
+          // Update local state smoothly without full reload
+          if (profileUpdateData.userId === user.id) {
+            setProfile((prev: any) => ({
+              ...prev,
+              ...profileUpdateData.updates,
+              profile_completion: profileUpdateData.profile_completion
+            }));
+            
+            setProfileData((prev: any) => ({
+              ...prev,
+              ...profileUpdateData.updates,
+              profile_completion: profileUpdateData.profile_completion
+            }));
+            
+            // Update localStorage for persistence
+            try {
+              const updatedUser = { ...user, ...profileUpdateData.updates };
+              localStorage.setItem('user', JSON.stringify(updatedUser));
+              console.log('📊 Updated user in localStorage from socket:', updatedUser);
+            } catch (err) {
+              console.error('❌ Error updating localStorage from socket:', err);
+            }
+            
+            toast.success('Hồ sơ đã được cập nhật realtime!', { 
+              position: 'bottom-right',
+              autoClose: 2000
+            });
+          }
+        });
+        
+        // Listen for profile sync events
+        socketService.on('profile-sync-required', () => {
+          console.log('🔄 Profile sync required, fetching latest data...');
+          fetchProfileData();
+        });
+      } catch (socketError) {
+        console.error('❌ Socket setup error:', socketError);
+      }
+    }
+    
     // Kiểm tra trong localStorage trước
     try {
       const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
@@ -771,6 +829,15 @@ const StudentProfile: React.FC = () => {
       setOtherSkills([]);
       setLoading(false);
     });
+    
+    // Cleanup function
+    return () => {
+      console.log('🧹 Cleaning up StudentProfile socket listeners');
+      if (socketService) {
+        socketService.off('profile-updated');
+        socketService.off('profile-sync-required');
+      }
+    };
   }, []);
 
   // Xử lý upload avatar
@@ -920,6 +987,137 @@ const StudentProfile: React.FC = () => {
   };
 
   // Lưu hồ sơ
+  // Tính toán mức độ hoàn thiện hồ sơ theo thời gian thực
+  const calculateProfileCompletion = () => {
+    // Các trường bắt buộc cơ bản (40%)
+    const basicFields = [
+      { name: 'firstName', weight: 5 },
+      { name: 'lastName', weight: 5 },
+      { name: 'email', weight: 5 },
+      { name: 'phone', weight: 5 },
+      { name: 'summary', weight: 10 },
+      { name: 'avatar', weight: 10 },
+    ];
+    
+    // Các phần thông tin bổ sung (60%)
+    const additionalSections = [
+      // Thông tin liên hệ (15%)
+      { name: 'linkedin', weight: 5 },
+      { name: 'github', weight: 5 },
+      { name: 'portfolio', weight: 5 },
+      
+      // Kỹ năng (15%)
+      { 
+        name: 'skills', 
+        weight: 10,
+        check: () => (profileData.skills?.length > 0) 
+      },
+      { 
+        name: 'otherSkills', 
+        weight: 5,
+        check: () => (profileData.otherSkills?.length > 0 || profileData.customSkills?.length > 0) 
+      },
+      
+      // Học vấn (15%)
+      { 
+        name: 'education', 
+        weight: 15,
+        check: () => {
+          const educations = profileData.education || profileData.educations || [];
+          return educations.length > 0 && educations.some((edu: any) => 
+            edu.institution && edu.degree && edu.fieldOfStudy && edu.startDate
+          );
+        }
+      },
+      
+      // Dự án (15%)
+      { 
+        name: 'projects', 
+        weight: 15,
+        check: () => {
+          const projects = profileData.projects || [];
+          return projects.length > 0 && projects.some((proj: any) => 
+            proj.title && proj.description && proj.startDate && 
+            (proj.technologies?.length > 0 || proj.githubUrl || proj.liveUrl)
+          );
+        }
+      },
+      
+      // Kinh nghiệm làm việc (10%)
+      {
+        name: 'workExperiences',
+        weight: 10,
+        check: () => {
+          const workExperiences = profileData.workExperiences || [];
+          return workExperiences.length > 0 && workExperiences.some((exp: any) =>
+            exp.company && exp.position && exp.description && exp.startDate
+          );
+        }
+      },
+      
+      // Chứng chỉ (5%)
+      {
+        name: 'certifications',
+        weight: 5,
+        check: () => {
+          const certifications = profileData.certifications || [];
+          return certifications.length > 0 && certifications.some((cert: any) =>
+            cert.name && cert.issuer
+          );
+        }
+      }
+    ];
+    
+    // Tính điểm cho các trường cơ bản
+    let basicScore = 0;
+    for (const field of basicFields) {
+      if (profileData[field.name]) {
+        basicScore += field.weight;
+      }
+    }
+    
+    // Tính điểm cho các phần bổ sung
+    let additionalScore = 0;
+    for (const section of additionalSections) {
+      if (section.check) {
+        if (section.check()) {
+          additionalScore += section.weight;
+        }
+      } else if (profileData[section.name]) {
+        additionalScore += section.weight;
+      }
+    }
+    
+    // Tổng điểm tối đa
+    const totalBasicWeight = basicFields.reduce((sum, field) => sum + field.weight, 0);
+    const totalAdditionalWeight = additionalSections.reduce((sum, section) => sum + section.weight, 0);
+    
+    // Tính phần trăm hoàn thiện
+    const totalScore = basicScore + additionalScore;
+    const maxScore = totalBasicWeight + totalAdditionalWeight;
+    
+    console.log('📊 Profile completion calculation:', {
+      basicScore,
+      additionalScore,
+      totalScore,
+      maxScore,
+      percentage: Math.round((totalScore / maxScore) * 100)
+    });
+    
+    const percentage = Math.round((totalScore / maxScore) * 100);
+    
+    // Chỉ log khi có thay đổi đáng kể (giảm spam logs)
+    if (Math.abs(percentage - (profile?.profile_completion || 0)) > 5) {
+      console.log('📊 Profile completion significant change:', {
+        previousValue: profile?.profile_completion || 0,
+        newValue: percentage,
+        change: percentage - (profile?.profile_completion || 0)
+      });
+    }
+    
+    return percentage;
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -1068,6 +1266,35 @@ const StudentProfile: React.FC = () => {
         setProfile(updatedProfile);
         setProfileData(updatedProfile);
         
+        // Cập nhật localStorage ngay lập tức để đảm bảo persistence
+        try {
+          const user = JSON.parse(localStorage.getItem('user') || '{}');
+          user.profile_completion = updatedProfile.profile_completion || profileCompletion;
+          user.firstName = updatedProfile.firstName;
+          user.lastName = updatedProfile.lastName;
+          localStorage.setItem('user', JSON.stringify(user));
+          console.log('📊 Updated user data in localStorage:', user);
+        } catch (err) {
+          console.error('❌ Error updating localStorage after save:', err);
+        }
+        
+        // Emit socket event for realtime updates
+        if (socketService && socketService.isConnected) {
+          const user = JSON.parse(localStorage.getItem('user') || '{}');
+          socketService.emit('profile-updated', {
+            userId: user.id,
+            updates: {
+              firstName: updatedProfile.firstName,
+              lastName: updatedProfile.lastName,
+              profile_completion: updatedProfile.profile_completion || profileCompletion,
+              avatar: updatedProfile.avatar,
+              skills: updatedProfile.skills
+            },
+            timestamp: new Date()
+          });
+          console.log('🔄 Emitted profile-updated socket event');
+        }
+        
         // Extract other skills again
         const frontEndSkills = (updatedProfile.skills || []).filter((s: string) => /react|typescript|js|html|css|ajax|bootstrap/i.test(s));
         const backEndSkills = (updatedProfile.skills || []).filter((s: string) => /php|mysql|node|express|api/i.test(s));
@@ -1111,8 +1338,14 @@ const StudentProfile: React.FC = () => {
       setEditMode(false);
       toast.success('Cập nhật hồ sơ thành công!');
       
-      // Đồng bộ lại dữ liệu từ server sau khi lưu
-      await fetchProfileData();
+      // Đồng bộ lại dữ liệu từ server để đảm bảo consistency (debounced)
+      setTimeout(async () => {
+        try {
+          await fetchProfileData();
+        } catch (error) {
+          console.error('❌ Error syncing data after save:', error);
+        }
+      }, 1000);
     } catch (e: any) {
       // Hiển thị lỗi chi tiết từ backend nếu có
       if (e.response && e.response.data && e.response.data.message) {
@@ -1150,134 +1383,20 @@ const StudentProfile: React.FC = () => {
     }
   };
 
-  // Tính toán mức độ hoàn thiện hồ sơ theo thời gian thực
-  const calculateProfileCompletion = () => {
-    // Các trường bắt buộc cơ bản (40%)
-    const basicFields = [
-      { name: 'firstName', weight: 5 },
-      { name: 'lastName', weight: 5 },
-      { name: 'email', weight: 5 },
-      { name: 'phone', weight: 5 },
-      { name: 'summary', weight: 10 },
-      { name: 'avatar', weight: 10 },
-    ];
-    
-    // Các phần thông tin bổ sung (60%)
-    const additionalSections = [
-      // Thông tin liên hệ (15%)
-      { name: 'linkedin', weight: 5 },
-      { name: 'github', weight: 5 },
-      { name: 'portfolio', weight: 5 },
-      
-      // Kỹ năng (15%)
-      { 
-        name: 'skills', 
-        weight: 10,
-        check: () => (profileData.skills?.length > 0) 
-      },
-      { 
-        name: 'otherSkills', 
-        weight: 5,
-        check: () => (profileData.otherSkills?.length > 0 || profileData.customSkills?.length > 0) 
-      },
-      
-      // Học vấn (15%)
-      { 
-        name: 'education', 
-        weight: 15,
-        check: () => {
-          const educations = profileData.education || profileData.educations || [];
-          return educations.length > 0 && educations.some((edu: any) => 
-            edu.institution && edu.degree && edu.fieldOfStudy && edu.startDate
-          );
-        }
-      },
-      
-      // Dự án (15%)
-      { 
-        name: 'projects', 
-        weight: 15,
-        check: () => {
-          const projects = profileData.projects || [];
-          return projects.length > 0 && projects.some((proj: any) => 
-            proj.title && proj.description && proj.startDate && 
-            (proj.technologies?.length > 0 || proj.githubUrl || proj.liveUrl)
-          );
-        }
-      },
-      
-      // Kinh nghiệm làm việc (10%)
-      {
-        name: 'workExperiences',
-        weight: 10,
-        check: () => {
-          const workExperiences = profileData.workExperiences || [];
-          return workExperiences.length > 0 && workExperiences.some((exp: any) =>
-            exp.company && exp.position && exp.description && exp.startDate
-          );
-        }
-      },
-      
-      // Chứng chỉ (5%)
-      {
-        name: 'certifications',
-        weight: 5,
-        check: () => {
-          const certifications = profileData.certifications || [];
-          return certifications.length > 0 && certifications.some((cert: any) =>
-            cert.name && cert.issuer
-          );
-        }
-      }
-    ];
-    
-    // Tính điểm cho các trường cơ bản
-    let basicScore = 0;
-    for (const field of basicFields) {
-      if (profileData[field.name]) {
-        basicScore += field.weight;
-      }
+  // Tính toán mức độ hoàn thiện hồ sơ theo thời gian thực (với memoization)
+  const realTimeCompletion = useMemo(() => {
+    if (editMode) {
+      return calculateProfileCompletion();
     }
-    
-    // Tính điểm cho các phần bổ sung
-    let additionalScore = 0;
-    for (const section of additionalSections) {
-      if (section.check) {
-        if (section.check()) {
-          additionalScore += section.weight;
-        }
-      } else if (profileData[section.name]) {
-        additionalScore += section.weight;
-      }
-    }
-    
-    // Tổng điểm tối đa
-    const totalBasicWeight = basicFields.reduce((sum, field) => sum + field.weight, 0);
-    const totalAdditionalWeight = additionalSections.reduce((sum, section) => sum + section.weight, 0);
-    
-    // Tính phần trăm hoàn thiện
-    const totalScore = basicScore + additionalScore;
-    const maxScore = totalBasicWeight + totalAdditionalWeight;
-    
-    console.log('📊 Profile completion calculation:', {
-      basicScore,
-      additionalScore,
-      totalScore,
-      maxScore,
-      percentage: Math.round((totalScore / maxScore) * 100)
-    });
-    
-    return Math.round((totalScore / maxScore) * 100);
-  };
+    return profile?.profile_completion || 0;
+  }, [editMode, profileData, profile?.profile_completion, calculateProfileCompletion]);
 
-  // Tính toán mức độ hoàn thiện hồ sơ theo thời gian thực
-  const realTimeCompletion = editMode ? calculateProfileCompletion() : (profile?.profile_completion || 0);
-
-  // Lưu giá trị profile_completion vào localStorage khi thay đổi
+  // Lưu giá trị profile_completion vào localStorage khi thay đổi (debounced)
   useEffect(() => {
-    if (profile?.profile_completion) {
+    if (!profile?.profile_completion) return;
+    
+    const timeoutId = setTimeout(() => {
       try {
-        // Lấy user từ localStorage
         const user = JSON.parse(localStorage.getItem('user') || '{}');
         
         // Chỉ cập nhật nếu giá trị mới lớn hơn giá trị cũ
@@ -1289,25 +1408,24 @@ const StudentProfile: React.FC = () => {
       } catch (err) {
         console.error('❌ Error updating localStorage:', err);
       }
-    }
+    }, 500); // Debounce để tránh spam updates
+
+    return () => clearTimeout(timeoutId);
   }, [profile?.profile_completion]);
 
-  // Khôi phục giá trị profile_completion từ localStorage khi reload trang
+  // Khôi phục giá trị profile_completion từ localStorage khi mount
   useEffect(() => {
     try {
-      if (!profile?.profile_completion) return;
-      
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       
-      // Nếu giá trị trong localStorage lớn hơn, sử dụng nó
-      if (user.profile_completion && user.profile_completion > profile.profile_completion) {
+      if (user.profile_completion && profile && (!profile.profile_completion || user.profile_completion > profile.profile_completion)) {
         console.log('📊 Using profile_completion from localStorage:', user.profile_completion);
-        setProfile({...profile, profile_completion: user.profile_completion});
+        setProfile((prev: any) => prev ? {...prev, profile_completion: user.profile_completion} : prev);
       }
     } catch (err) {
       console.error('❌ Error restoring profile_completion from localStorage:', err);
     }
-  }, [profile]);
+  }, [profile]); // Chỉ chạy khi profile thay đổi
 
   // Tạo profile mới nếu chưa có
   const createNewProfile = async () => {

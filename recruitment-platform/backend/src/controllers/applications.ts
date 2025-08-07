@@ -19,7 +19,7 @@ export const getApplications = async (req: Request, res: Response) => {
     }
 
     // Get all jobs for this company
-    const companyJobs = await prisma.job.findMany({
+    const companyJobs = await prisma.jobs.findMany({
       where: {
         companyId: companyId
       },
@@ -32,27 +32,27 @@ export const getApplications = async (req: Request, res: Response) => {
     console.log(`Found ${jobIds.length} jobs for company ${companyId}`);
 
     // Get applications for these jobs
-    const applications = await prisma.application.findMany({
+    const applications = await prisma.applications.findMany({
       where: {
         jobId: {
           in: jobIds
         }
       },
       include: {
-        student: {
+        users: {
           include: {
-            studentProfile: {
+            student_profiles: {
               include: {
-                educations: true,
-                workExperiences: true,
-                languages: true,
-                certifications: true,
-                projects: true
+                student_educations: true,
+                student_experiences: true,
+                student_languages: true,
+                student_certifications: true,
+                student_projects: true
               }
             }
           }
         },
-        job: {
+        jobs: {
           include: {
             company_profiles: true
           }
@@ -70,7 +70,7 @@ export const getApplications = async (req: Request, res: Response) => {
     const transformedApplications = applications.map(app => ({
       id: app.id,
       jobId: app.jobId,
-      jobTitle: app.job.title,
+      jobTitle: app.jobs.title,
       status: app.status,
       appliedAt: app.appliedAt,
       updatedAt: app.updatedAt,
@@ -78,24 +78,24 @@ export const getApplications = async (req: Request, res: Response) => {
       hrNotes: app.hrNotes,
       feedback: app.feedback,
       rating: app.rating,
-      student: {
-        id: app.student.id,
-        firstName: app.student.studentProfile?.firstName || '',
-        lastName: app.student.studentProfile?.lastName || '',
-        email: app.student.email,
-        phone: app.student.studentProfile?.phone,
-        avatar: app.student.studentProfile?.avatar,
-        university: app.student.studentProfile?.university,
-        major: app.student.studentProfile?.major,
-        graduationYear: app.student.studentProfile?.graduationYear,
-        gpa: app.student.studentProfile?.gpa,
-        skills: app.student.studentProfile?.skills || [],
-        experience: app.student.studentProfile?.experience,
-        portfolio: app.student.studentProfile?.portfolio,
-        github: app.student.studentProfile?.github,
-        linkedin: app.student.studentProfile?.linkedin,
-        resume: app.student.studentProfile?.resume,
-        educations: app.student.studentProfile?.educations.map(edu => ({
+      users: {
+        id: app.users.id,
+        firstName: app.users.student_profiles?.firstName || '',
+        lastName: app.users.student_profiles?.lastName || '',
+        email: app.users.email,
+        phone: app.users.student_profiles?.phone,
+        avatar: app.users.student_profiles?.avatar,
+        university: app.users.student_profiles?.university,
+        major: app.users.student_profiles?.major,
+        graduationYear: app.users.student_profiles?.graduationYear,
+        gpa: app.users.student_profiles?.gpa,
+        skills: app.users.student_profiles?.skills || [],
+        experience: app.users.student_profiles?.experience,
+        portfolio: app.users.student_profiles?.portfolio,
+        github: app.users.student_profiles?.github,
+        linkedin: app.users.student_profiles?.linkedin,
+        resume: app.users.student_profiles?.resume,
+        educations: app.users.student_profiles?.student_educations.map(edu => ({
           institution: edu.institution,
           degree: edu.degree,
           fieldOfStudy: edu.fieldOfStudy,
@@ -105,7 +105,7 @@ export const getApplications = async (req: Request, res: Response) => {
           gpa: edu.gpa,
           achievements: edu.achievements
         })) || [],
-        workExperiences: app.student.studentProfile?.workExperiences.map(exp => ({
+        workExperiences: app.users.student_profiles?.student_experiences.map(exp => ({
           company: exp.company,
           position: exp.position,
           startDate: exp.startDate,
@@ -115,12 +115,12 @@ export const getApplications = async (req: Request, res: Response) => {
           skills: exp.skills,
           achievements: exp.achievements
         })) || [],
-        languages: app.student.studentProfile?.languages.map(lang => ({
+        languages: app.users.student_profiles?.student_languages.map(lang => ({
           name: lang.name,
           proficiency: lang.proficiency,
           certification: lang.certification
         })) || [],
-        certifications: app.student.studentProfile?.certifications.map(cert => ({
+        certifications: app.users.student_profiles?.student_certifications.map(cert => ({
           name: cert.name,
           issuer: cert.issuer,
           issueDate: cert.issueDate,
@@ -128,7 +128,7 @@ export const getApplications = async (req: Request, res: Response) => {
           credentialId: cert.credentialId,
           credentialUrl: cert.credentialUrl
         })) || [],
-        projects: app.student.studentProfile?.projects.map(proj => ({
+        projects: app.users.student_profiles?.student_projects.map(proj => ({
           title: proj.title,
           description: proj.description,
           technologies: proj.technologies,
@@ -180,11 +180,11 @@ export const updateApplication = async (req: Request, res: Response) => {
 
   try {
     // Get current application
-    const currentApp = await prisma.application.findUnique({
+    const currentApp = await prisma.applications.findUnique({
       where: { id },
       include: {
-        student: true,
-        job: {
+        users: true,
+        jobs: {
           include: {
             company_profiles: true
           }
@@ -208,7 +208,7 @@ export const updateApplication = async (req: Request, res: Response) => {
     });
 
     // Update application
-    const updatedApp = await prisma.application.update({
+    const updatedApp = await prisma.applications.update({
       where: { id },
       data: {
         status,
@@ -220,22 +220,23 @@ export const updateApplication = async (req: Request, res: Response) => {
         respondedAt: ['ACCEPTED', 'REJECTED'].includes(status) ? new Date() : undefined
       },
       include: {
-        student: {
+        users: {
           include: {
-            studentProfile: true
+            student_profiles: true
           }
         },
-        job: true
+        jobs: true
       }
     });
 
     // Create notification
-    await prisma.notification.create({
+    await prisma.notifications.create({
       data: {
+        id: require('crypto').randomUUID(),
         userId: currentApp.studentId,
         type: 'APPLICATION_STATUS_CHANGED',
         title: 'Trạng thái ứng tuyển đã được cập nhật',
-        message: `Đơn ứng tuyển vị trí ${currentApp.job.title} của bạn đã được cập nhật sang trạng thái mới`,
+        message: `Đơn ứng tuyển vị trí ${currentApp.jobs.title} của bạn đã được cập nhật sang trạng thái mới`,
         data: {
           applicationId: id,
           jobId: currentApp.jobId,
@@ -252,8 +253,8 @@ export const updateApplication = async (req: Request, res: Response) => {
     io.to(`user:${currentApp.studentId}`).emit('application-status-changed', {
       applicationId: id,
       status,
-      jobTitle: currentApp.job.title,
-      companyName: currentApp.job.company_profiles.companyName
+      jobTitle: currentApp.jobs.title,
+      companyName: currentApp.jobs.company_profiles.companyName
     });
 
     res.json({

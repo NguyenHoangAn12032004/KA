@@ -15,17 +15,18 @@ import {
   LandingPage,
   StudentDashboard,
   CompanyDashboard,
-  AdminDashboard,
   ModernJobsPage,
   CompanyProfile,
   StudentProfile,
   CompaniesPage,
   AnalyticsPage,
   NotificationsPage,
-  SettingsPage,
+  ChatbotPage,
+  // SettingsPage,
   CandidatesPage,
   CreateJobPage,
 } from "./components";
+import { AdminControlPanel } from "./components/admin/AdminControlPanel";
 import AnalyticsDemo from "./components/AnalyticsDemo";
 import SimpleAnalyticsTest from "./components/SimpleAnalyticsTest";
 import SimpleAnalytics from "./components/SimpleAnalytics";
@@ -122,7 +123,7 @@ const AppContent: React.FC = () => {
             element={
               user?.role === "ADMIN" ? (
                 <PageWrapper>
-                  <AdminDashboard />
+                  <AdminControlPanel user={user} />
                 </PageWrapper>
               ) : (
                 <Navigate to="/" replace />
@@ -250,6 +251,18 @@ const AppContent: React.FC = () => {
             element={<ModernAnalyticsDashboard />}
           />
           <Route
+            path="/chatbot"
+            element={
+              user ? (
+                <PageWrapper>
+                  <ChatbotPage />
+                </PageWrapper>
+              ) : (
+                <Navigate to="/" replace />
+              )
+            }
+          />
+          <Route
             path="/notifications"
             element={
               user ? (
@@ -266,7 +279,8 @@ const AppContent: React.FC = () => {
             element={
               user ? (
                 <PageWrapper>
-                  <SettingsPage />
+                  {/* <SettingsPage /> */}
+                  <div>Settings Page Coming Soon</div>
                 </PageWrapper>
               ) : (
                 <Navigate to="/" replace />
@@ -283,7 +297,12 @@ const AppContent: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <Router>
+    <Router
+      future={{
+        v7_startTransition: true,
+        v7_relativeSplatPath: true
+      }}
+    >
       <AuthProvider>
         <ThemeProvider>
           <LanguageProvider>

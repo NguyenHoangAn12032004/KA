@@ -1,7 +1,24 @@
 import { Server } from 'socket.io';
 import { logger } from '../utils/logger';
+import { AdminSocketService } from './AdminSocketService';
+import NotificationService from './notificationService';
+
+// Store the io instance globally for use in other modules
+let ioInstance: Server | null = null;
+let adminSocketService: AdminSocketService | null = null;
+let notificationService: NotificationService | null = null;
 
 export const initializeSocket = (io: Server) => {
+  ioInstance = io; // Store the instance
+  
+  // Initialize admin socket service
+  adminSocketService = new AdminSocketService(io);
+  
+  // Initialize notification service
+  notificationService = new NotificationService(io);
+  
+  logger.info('🚀 Socket.IO service initialized with admin real-time features and notifications');
+  
   io.on('connection', (socket) => {
     logger.info(`🔌 User connected: ${socket.id}`);
 
@@ -91,6 +108,41 @@ export const initializeSocket = (io: Server) => {
       });
       
       logger.info(`📅 Interview scheduled for student ${studentId}`);
+    });
+
+    // ==================================================================
+    // STUDENT PROFILE REAL-TIME FEATURES
+    // ==================================================================
+
+    // Handle student profile updates
+    socket.on('profile-updated', (data) => {
+      const { userId, updates, timestamp } = data;
+      
+      // Broadcast to other clients of the same user (multi-device sync)
+      socket.to(`user-${userId}`).emit('profile-updated', {
+        userId,
+        updates,
+        profile_completion: updates.profile_completion,
+        timestamp: timestamp || new Date()
+      });
+      
+      // Notify relevant company rooms if this student has applications
+      // (Optional: could notify companies that this student applied to)
+      
+      logger.info(`👤 Student profile updated for user: ${userId}`);
+    });
+
+    // Handle profile sync requests
+    socket.on('profile-sync-request', (data) => {
+      const { userId } = data;
+      
+      // Notify all clients of this user to sync their profile data
+      io.to(`user-${userId}`).emit('profile-sync-required', {
+        userId,
+        timestamp: new Date()
+      });
+      
+      logger.info(`🔄 Profile sync requested for user: ${userId}`);
     });
 
     // ==================================================================
@@ -407,3 +459,144 @@ export const initializeSocket = (io: Server) => {
 
   logger.info('🚀 Socket.IO service initialized with company real-time features');
 };
+
+// ==================================================================
+// HELPER FUNCTIONS FOR EMITTING EVENTS FROM OTHER MODULES
+// ==================================================================
+
+export const emitToUser = (userId: string, event: string, data: any) => {
+  if (ioInstance) {
+    ioInstance.to(`user-${userId}`).emit(event, {
+      ...data,
+      timestamp: new Date()
+    });
+    logger.info(`📡 Emitted ${event} to user ${userId}`);
+  }
+};
+
+export const emitToCompany = (companyId: string, event: string, data: any) => {
+  if (ioInstance) {
+    ioInstance.to(`company-${companyId}`).emit(event, {
+      ...data,
+      timestamp: new Date()
+    });
+    logger.info(`📡 Emitted ${event} to company ${companyId}`);
+  }
+};
+
+export const emitToJob = (jobId: string, event: string, data: any) => {
+  if (ioInstance) {
+    ioInstance.to(`job-${jobId}`).emit(event, {
+      ...data,
+      timestamp: new Date()
+    });
+    logger.info(`📡 Emitted ${event} to job ${jobId}`);
+  }
+};
+
+// Student Dashboard specific events
+export const emitStudentDashboardUpdate = (studentId: string, updateType: string, data: any) => {
+  if (ioInstance) {
+    ioInstance.to(`user-${studentId}`).emit('student-dashboard-update', {
+      type: updateType,
+      data,
+      timestamp: new Date()
+    });
+    logger.info(`📊 Emitted student dashboard update: ${updateType} to user ${studentId}`);
+  }
+};
+
+export const emitJobViewUpdate = (studentId: string, jobData: any) => {
+  if (ioInstance) {
+    ioInstance.to(`user-${studentId}`).emit('job-view-updated', {
+      studentId,
+      jobId: jobData.id,
+      jobTitle: jobData.title,
+      companyName: jobData.company?.companyName || 'Unknown',
+      ...jobData,
+      timestamp: new Date()
+    });
+    logger.info(`👁️ Emitted job view update to user ${studentId}`);
+  }
+};
+
+export const emitApplicationUpdate = (studentId: string, applicationData: any) => {
+  if (ioInstance) {
+    ioInstance.to(`user-${studentId}`).emit('application-updated', {
+      studentId,
+      ...applicationData,
+      timestamp: new Date()
+    });
+    logger.info(`📝 Emitted application update to user ${studentId}`);
+  }
+};
+
+export const emitSavedJobUpdate = (studentId: string, action: 'saved' | 'unsaved', jobData: any) => {
+  if (ioInstance) {
+    ioInstance.to(`user-${studentId}`).emit('saved-job-updated', {
+      studentId,
+      action,
+      jobId: jobData.id,
+      jobTitle: jobData.title,
+      companyName: jobData.company?.companyName || 'Unknown',
+      ...jobData,
+      timestamp: new Date()
+    });
+    logger.info(`💾 Emitted saved job ${action} to user ${studentId}`);
+  }
+};
+
+export const emitProfileUpdate = (studentId: string, profileData: any) => {
+  if (ioInstance) {
+    ioInstance.to(`user-${studentId}`).emit('profile-updated', {
+      studentId,
+      ...profileData,
+      timestamp: new Date()
+    });
+    logger.info(`👤 Emitted profile update to user ${studentId}`);
+  }
+};
+
+export const emitInterviewScheduled = (studentId: string, interviewData: any) => {
+  if (ioInstance) {
+    ioInstance.to(`user-${studentId}`).emit('interview-scheduled', {
+      studentId,
+      ...interviewData,
+      timestamp: new Date()
+    });
+    logger.info(`📅 Emitted interview scheduled to user ${studentId}`);
+  }
+};
+
+// Global broadcast functions
+export const broadcastToAllCompanies = (event: string, data: any) => {
+  if (ioInstance) {
+    ioInstance.to('all-companies').emit(event, {
+      ...data,
+      timestamp: new Date()
+    });
+    logger.info(`📢 Broadcasted ${event} to all companies`);
+  }
+};
+
+// Export notification service functions
+export const getNotificationService = (): NotificationService | null => {
+  return notificationService;
+};
+
+export const sendNotification = async (notificationData: {
+  userId: string;
+  type: 'APPLICATION_SUBMITTED' | 'APPLICATION_STATUS_CHANGED' | 'NEW_JOB_POSTED' | 'INTERVIEW_SCHEDULED' | 'MESSAGE_RECEIVED' | 'SYSTEM_ANNOUNCEMENT';
+  title: string;
+  message: string;
+  data?: any;
+}) => {
+  if (notificationService) {
+    await notificationService.createAndSendNotification(notificationData);
+  } else {
+    logger.error('❌ Notification service not initialized');
+  }
+};
+
+export const getSocketInstance = () => ioInstance;
+export const getAdminSocketService = () => adminSocketService;

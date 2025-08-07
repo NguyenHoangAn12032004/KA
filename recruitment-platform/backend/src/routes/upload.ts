@@ -94,9 +94,9 @@ router.post('/avatar', authenticateToken, upload.single('avatar'), async (req: a
     }
 
     // Find student profile
-    const user = await prisma.user.findUnique({
+    const user = await prisma.users.findUnique({
       where: { id: userId },
-      include: { studentProfile: true }
+      include: { student_profiles: true }
     });
 
     if (!user) {
@@ -104,23 +104,19 @@ router.post('/avatar', authenticateToken, upload.single('avatar'), async (req: a
     }
 
     // Update avatar URL in database
-    if (user.studentProfile) {
+    if (user.student_profiles) {
       // If profile exists, update it
       console.log('✏️ Updating existing profile with avatar');
-      await prisma.studentProfile.update({
-        where: { id: user.studentProfile.id },
+      await prisma.student_profiles.update({
+        where: { id: user.student_profiles.id },
         data: { avatar: avatarUrl }
       });
     } else {
-      // If profile doesn't exist, create it
-      console.log('🆕 Creating new profile with avatar');
-      await prisma.studentProfile.create({
-        data: {
-          userId,
-          avatar: avatarUrl,
-          firstName: 'New',
-          lastName: 'User'
-        }
+      // If profile doesn't exist, return error for now
+      console.log('❌ No profile found for user');
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Please create your profile first before uploading avatar' 
       });
     }
 

@@ -23,7 +23,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
     const { email, password, role, firstName, lastName, companyName } = req.body;
 
     // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
+    const existingUser = await prisma.users.findUnique({
       where: { email }
     });
 
@@ -39,15 +39,19 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
     const hashedPassword = await bcrypt.hash(password, 12);
 
     // Create user
-    const user = await prisma.user.create({
+    const user = await prisma.users.create({
       data: {
+        id: `user-${Date.now()}`,
         email,
         password: hashedPassword,
         role,
-        studentProfile: role === 'STUDENT' ? {
+        updatedAt: new Date(),
+        student_profiles: role === 'STUDENT' ? {
           create: {
+            id: `student-${Date.now()}`,
             firstName,
-            lastName
+            lastName,
+            updatedAt: new Date()
           }
         } : undefined,
         company_profiles: role === 'COMPANY' ? {
@@ -59,7 +63,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
         } : undefined
       },
       include: {
-        studentProfile: true,
+        student_profiles: true,
         company_profiles: true
       }
     });
@@ -95,7 +99,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     console.log('🔍 Login attempt for email:', email);
 
     // Find user (no include) for password check and update
-    const user = await prisma.user.findUnique({
+    const user = await prisma.users.findUnique({
       where: { email }
     });
 
@@ -121,16 +125,16 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     }
 
     // Update last login
-    await prisma.user.update({
+    await prisma.users.update({
       where: { id: user.id },
       data: { lastLogin: new Date() }
     });
 
     // Fetch user with profiles for response
-    const userWithProfiles = await prisma.user.findUnique({
+    const userWithProfiles = await prisma.users.findUnique({
       where: { email },
       include: {
-        studentProfile: true,
+        student_profiles: true,
         company_profiles: true
       }
     });
@@ -173,11 +177,11 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res: Response): Pr
     }
 
     // Get full user data with company profile
-    const user = await prisma.user.findUnique({
+    const user = await prisma.users.findUnique({
       where: { id: req.user.id },
       include: {
         company_profiles: true,
-        studentProfile: true
+        student_profiles: true
       }
     });
 
@@ -200,7 +204,7 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res: Response): Pr
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
         company_profiles: user.company_profiles,
-        studentProfile: user.studentProfile,
+        studentProfile: user.student_profiles,
         companyId: user.company_profiles?.id
       }
     });

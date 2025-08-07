@@ -150,90 +150,38 @@ const CandidateProfile: React.FC = () => {
       // Debug: Log the actual API response structure
       console.log('🔍 User API Response:', userResponse);
       console.log('🔍 User Data:', userData);
-      console.log('🔍 Student Profile:', userData?.studentProfile);
+      console.log('🔍 Student Profile:', userData?.student_profiles);
       
-      // Get applications for this candidate
-      const applicationsResponse = await applicationsAPI.getByStudent();
+      // Get applications for this candidate using the new API
+      const applicationsResponse = await applicationsAPI.getByStudentId(studentId!);
       const applications = applicationsResponse.data?.data || [];
+      
+      // Use the correct data structure from backend
+      const studentProfile = userData?.student_profiles;
       
       // Combine data with fallbacks and sample data for demonstration
       const profileData: CandidateProfileData = {
         id: userData.id,
-        firstName: userData.studentProfile?.firstName || 'Chưa cập nhật',
-        lastName: userData.studentProfile?.lastName || '',
+        firstName: studentProfile?.firstName || 'Chưa cập nhật',
+        lastName: studentProfile?.lastName || '',
         email: userData.email,
-        phone: userData.studentProfile?.phone || 'Chưa cập nhật',
-        avatar: userData.studentProfile?.avatar,
-        university: userData.studentProfile?.university || 'Đại học Công nghệ Thông tin',
-        major: userData.studentProfile?.major || 'Công nghệ Thông tin',
-        graduationYear: userData.studentProfile?.graduationYear || 2024,
-        gpa: userData.studentProfile?.gpa || 3.5,
-        skills: userData.studentProfile?.skills?.length > 0 ? userData.studentProfile.skills : [
-          'JavaScript', 'React', 'Node.js', 'TypeScript', 'Python', 'SQL', 'Git', 'Docker'
-        ],
-        experience: userData.studentProfile?.experience || 'Sinh viên năm cuối với kinh nghiệm thực tập tại các công ty công nghệ.',
-        portfolio: userData.studentProfile?.portfolio || 'https://portfolio-example.com',
-        github: userData.studentProfile?.github || 'https://github.com/student-example',
-        linkedin: userData.studentProfile?.linkedin || 'https://linkedin.com/in/student-example',
-        resume: userData.studentProfile?.resume,
-        educations: userData.studentProfile?.educations?.length > 0 ? userData.studentProfile.educations : [
-          {
-            id: '1',
-            institution: 'Đại học Công nghệ Thông tin',
-            degree: 'Cử nhân',
-            major: 'Công nghệ Thông tin',
-            startDate: '2020-09-01',
-            endDate: '2024-06-30',
-            gpa: 3.5,
-            description: 'Chuyên ngành Kỹ thuật Phần mềm'
-          }
-        ],
-        workExperiences: userData.studentProfile?.workExperiences?.length > 0 ? userData.studentProfile.workExperiences : [
-          {
-            id: '1',
-            company: 'Công ty TNHH Công nghệ ABC',
-            position: 'Thực tập sinh Frontend Developer',
-            startDate: '2023-06-01',
-            endDate: '2023-08-31',
-            description: 'Phát triển giao diện web sử dụng React.js, tham gia dự án e-commerce.',
-            technologies: ['React', 'JavaScript', 'CSS', 'Material-UI']
-          }
-        ],
-        languages: userData.studentProfile?.languages?.length > 0 ? userData.studentProfile.languages : [
-          {
-            id: '1',
-            name: 'Tiếng Việt',
-            level: 'Bản ngữ'
-          },
-          {
-            id: '2',
-            name: 'Tiếng Anh',
-            level: 'Trung cấp (B2)'
-          }
-        ],
-        certifications: userData.studentProfile?.certifications?.length > 0 ? userData.studentProfile.certifications : [
-          {
-            id: '1',
-            name: 'AWS Cloud Practitioner',
-            issuer: 'Amazon Web Services',
-            issueDate: '2023-12-01',
-            expiryDate: '2026-12-01',
-            credentialId: 'AWS-CP-2023-001'
-          }
-        ],
-        projects: userData.studentProfile?.projects?.length > 0 ? userData.studentProfile.projects : [
-          {
-            id: '1',
-            name: 'Hệ thống quản lý tuyển dụng',
-            description: 'Ứng dụng web full-stack cho việc quản lý tuyển dụng với React và Node.js',
-            technologies: ['React', 'Node.js', 'PostgreSQL', 'Material-UI'],
-            startDate: '2023-09-01',
-            endDate: '2024-01-31',
-            githubUrl: 'https://github.com/student/recruitment-system',
-            liveUrl: 'https://recruitment-demo.com',
-            images: []
-          }
-        ],
+        phone: studentProfile?.phone || 'Chưa cập nhật',
+        avatar: studentProfile?.avatar,
+        university: studentProfile?.university || null,
+        major: studentProfile?.major || null,
+        graduationYear: studentProfile?.graduationYear || null,
+        gpa: studentProfile?.gpa || null,
+        skills: studentProfile?.skills || [],
+        experience: studentProfile?.experience || null,
+        portfolio: studentProfile?.portfolio || null,
+        github: studentProfile?.github || null,
+        linkedin: studentProfile?.linkedin || null,
+        resume: studentProfile?.resume,
+        educations: studentProfile?.educations || [],
+        workExperiences: studentProfile?.workExperiences || [],
+        languages: studentProfile?.languages || [],
+        certifications: studentProfile?.certifications || [],
+        projects: studentProfile?.projects || [],
         applications: applications
       };
       

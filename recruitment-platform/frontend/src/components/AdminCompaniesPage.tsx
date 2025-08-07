@@ -94,6 +94,7 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { companiesAPI, EnhancedCompany, CompaniesFilters } from '../services/api/companiesAPI';
+import { adminAPI, AdminCompany, AdminFilters as AdminAPIFilters } from '../services/api/adminAPI';
 import socketService from '../services/socketService';
 
 interface AdminStats {
@@ -151,9 +152,9 @@ const AdminCompaniesPage: React.FC = () => {
   
   // State management
   const [loading, setLoading] = useState(true);
-  const [companies, setCompanies] = useState<EnhancedCompany[]>([]);
+  const [companies, setCompanies] = useState<AdminCompany[]>([]);
   const [stats, setStats] = useState<AdminStats | null>(null);
-  const [selectedCompany, setSelectedCompany] = useState<EnhancedCompany | null>(null);
+  const [selectedCompany, setSelectedCompany] = useState<AdminCompany | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' as any });
   const [currentTab, setCurrentTab] = useState(0);
@@ -210,8 +211,16 @@ const AdminCompaniesPage: React.FC = () => {
     try {
       setLoading(true);
       
-      // Load companies with admin filters
-      const companiesResponse = await companiesAPI.getAll(convertFiltersToAPI(filters));
+      console.log('🔥 Admin LoadData - Starting...');
+      
+      // Load companies with admin API
+      const companiesResponse = await adminAPI.getCompanies({
+        page: 1,
+        limit: 100,
+        ...filters
+      });
+      
+      console.log('🔥 Admin companies response:', companiesResponse);
       
       // Load admin stats
       const statsResponse = await companiesAPI.getStats();
@@ -251,13 +260,14 @@ const AdminCompaniesPage: React.FC = () => {
 
     try {
       const token = localStorage.getItem('token');
-      if (token && !socketService.isConnected()) {
+      if (token && !socketService.isConnected) {
         socketService.connect(token);
         socketService.joinCompanyRoom('admin-monitoring');
       }
 
       // Real-time event handlers
       const handleCompanyUpdate = (data: any) => {
+        console.log('🔥 Real-time company update:', data);
         setRealTimeUpdates(prev => ({
           ...prev,
           [data.companyId]: {
@@ -275,10 +285,23 @@ const AdminCompaniesPage: React.FC = () => {
         ));
       };
 
+      const handleCompaniesUpdated = (data: any) => {
+        console.log('🔥 Real-time companies list updated:', data);
+        if (data.companies && Array.isArray(data.companies)) {
+          setCompanies(data.companies);
+          setSnackbar({
+            open: true,
+            message: 'Danh sách công ty đã được cập nhật',
+            severity: 'success'
+          });
+        }
+      };
+
       const handleNewCompany = (data: any) => {
+        console.log('🔥 Real-time new company:', data);
         setSnackbar({
           open: true,
-          message: `Công ty mới đăng ký: ${data.company.companyName}`,
+          message: `Công ty mới đăng ký: ${data.company?.name || 'Unknown'}`,
           severity: 'info'
         });
         
@@ -298,12 +321,14 @@ const AdminCompaniesPage: React.FC = () => {
 
       // Subscribe to events
       socketService.on('company-updated', handleCompanyUpdate);
+      socketService.on('companies-updated', handleCompaniesUpdated); // Add this new listener
       socketService.on('new-company-added', handleNewCompany);
       socketService.on('system-metrics', handleSystemMetrics);
       socketService.on('company-verification-update', handleCompanyUpdate);
 
       return () => {
         socketService.off('company-updated');
+        socketService.off('companies-updated'); // Clean up new listener
         socketService.off('new-company-added');
         socketService.off('system-metrics');
         socketService.off('company-verification-update');
@@ -316,18 +341,21 @@ const AdminCompaniesPage: React.FC = () => {
   // Admin actions
   const handleVerifyCompany = async (companyId: string, verified: boolean) => {
     try {
-      // This would call admin API to verify company
-      // await adminAPI.verifyCompany(companyId, verified);
+      console.log('🔥 Verifying company:', companyId, verified);
+      await adminAPI.verifyCompany(companyId, {
+        status: verified ? 'VERIFIED' : 'REJECTED',
+        reason: verified ? 'Approved by admin' : 'Rejected by admin'
+      });
       
       setCompanies(prev => prev.map(company => 
         company.id === companyId 
-          ? { ...company, isVerified: verified }
+          ? { ...company, isVerified: verified, verificationStatus: verified ? 'VERIFIED' : 'REJECTED' }
           : company
       ));
       
       setSnackbar({
         open: true,
-        message: `Công ty đã ${verified ? 'được xác thực' : 'bị hủy xác thực'}`,
+        message: `Công ty đã ${verified ? 'được xác thực' : 'bị từ chối'}`,
         severity: 'success'
       });
       
@@ -339,6 +367,7 @@ const AdminCompaniesPage: React.FC = () => {
       });
       
     } catch (error) {
+      console.error('Error verifying company:', error);
       setSnackbar({
         open: true,
         message: 'Có lỗi xảy ra khi cập nhật trạng thái xác thực',
@@ -366,6 +395,33 @@ const AdminCompaniesPage: React.FC = () => {
       setSnackbar({
         open: true,
         message: 'Có lỗi xảy ra khi xóa công ty',
+        severity: 'error'
+      });
+    }
+  };
+
+  const handleSuspendCompany = async (companyId: string, isActive: boolean) => {
+    try {
+      console.log('🔥 Updating company status:', companyId, isActive);
+      await adminAPI.updateCompanyStatus(companyId, isActive);
+      
+      setCompanies(prev => prev.map(company => 
+        company.id === companyId 
+          ? { ...company, status: isActive ? 'ACTIVE' : 'SUSPENDED' }
+          : company
+      ));
+      
+      setSnackbar({
+        open: true,
+        message: `Công ty đã ${isActive ? 'được kích hoạt' : 'bị tạm ngưng'}`,
+        severity: 'success'
+      });
+      
+    } catch (error) {
+      console.error('Error updating company status:', error);
+      setSnackbar({
+        open: true,
+        message: 'Có lỗi xảy ra khi cập nhật trạng thái công ty',
         severity: 'error'
       });
     }
@@ -646,15 +702,15 @@ const AdminCompaniesPage: React.FC = () => {
                     <TableRow key={company.id} hover>
                       <TableCell>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                          <Avatar src={company.logoUrl} sx={{ width: 40, height: 40 }}>
-                            {company.companyName.charAt(0)}
+                          <Avatar sx={{ width: 40, height: 40 }}>
+                            {company.name.charAt(0)}
                           </Avatar>
                           <Box>
                             <Typography variant="subtitle2" fontWeight={600}>
-                              {company.companyName}
+                              {company.name}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
-                              {company.location}
+                              {company.email}
                             </Typography>
                           </Box>
                         </Box>
@@ -662,7 +718,7 @@ const AdminCompaniesPage: React.FC = () => {
                       <TableCell>{company.industry}</TableCell>
                       <TableCell>
                         <Chip 
-                          label={company.companySize} 
+                          label={company.size} 
                           size="small" 
                           variant="outlined"
                         />
@@ -694,12 +750,12 @@ const AdminCompaniesPage: React.FC = () => {
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2" fontWeight={600}>
-                          {company.activeJobs || 0}
+                          {company.jobsCount || 0}
                         </Typography>
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2">
-                          {company.viewCount || 0}
+                          0
                         </Typography>
                       </TableCell>
                       <TableCell>
@@ -719,6 +775,15 @@ const AdminCompaniesPage: React.FC = () => {
                               onClick={() => handleVerifyCompany(company.id, !company.isVerified)}
                             >
                               {company.isVerified ? <Block /> : <VerifiedUser />}
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title={company.status === 'ACTIVE' ? "Tạm ngưng" : "Kích hoạt"}>
+                            <IconButton 
+                              size="small"
+                              color={company.status === 'ACTIVE' ? "warning" : "success"}
+                              onClick={() => handleSuspendCompany(company.id, company.status !== 'ACTIVE')}
+                            >
+                              {company.status === 'ACTIVE' ? <Security /> : <CheckCircle />}
                             </IconButton>
                           </Tooltip>
                           <Tooltip title="Xóa">
@@ -887,12 +952,12 @@ const AdminCompaniesPage: React.FC = () => {
           <>
             <DialogTitle>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Avatar src={selectedCompany.logoUrl} sx={{ width: 48, height: 48 }}>
-                  {selectedCompany.companyName.charAt(0)}
+                <Avatar sx={{ width: 48, height: 48 }}>
+                  {selectedCompany.name.charAt(0)}
                 </Avatar>
                 <Box>
                   <Typography variant="h6" fontWeight={700}>
-                    {selectedCompany.companyName}
+                    {selectedCompany.name}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     Admin View - ID: {selectedCompany.id}
@@ -903,31 +968,55 @@ const AdminCompaniesPage: React.FC = () => {
             <DialogContent dividers>
               <Grid container spacing={2}>
                 <Grid item xs={12} md={6}>
+                  <Typography variant="subtitle2" gutterBottom>Email</Typography>
+                  <Typography variant="body1" gutterBottom>{selectedCompany.email}</Typography>
+                </Grid>
+                <Grid item xs={12} md={6}>
                   <Typography variant="subtitle2" gutterBottom>Industry</Typography>
-                  <Typography variant="body1" gutterBottom>{selectedCompany.industry}</Typography>
+                  <Typography variant="body1" gutterBottom>{selectedCompany.industry || 'N/A'}</Typography>
                 </Grid>
                 <Grid item xs={12} md={6}>
                   <Typography variant="subtitle2" gutterBottom>Company Size</Typography>
-                  <Typography variant="body1" gutterBottom>{selectedCompany.companySize}</Typography>
+                  <Typography variant="body1" gutterBottom>{selectedCompany.size || 'N/A'}</Typography>
                 </Grid>
                 <Grid item xs={12} md={6}>
-                  <Typography variant="subtitle2" gutterBottom>Location</Typography>
-                  <Typography variant="body1" gutterBottom>{selectedCompany.location}</Typography>
+                  <Typography variant="subtitle2" gutterBottom>Jobs Count</Typography>
+                  <Typography variant="body1" gutterBottom>{selectedCompany.jobsCount}</Typography>
                 </Grid>
                 <Grid item xs={12} md={6}>
                   <Typography variant="subtitle2" gutterBottom>Verification Status</Typography>
                   <Chip 
                     icon={selectedCompany.isVerified ? <Verified /> : <Warning />}
-                    label={selectedCompany.isVerified ? 'Verified' : 'Unverified'}
+                    label={selectedCompany.verificationStatus}
                     color={selectedCompany.isVerified ? 'success' : 'warning'}
                   />
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <Typography variant="subtitle2" gutterBottom>Account Status</Typography>
+                  <Chip 
+                    icon={selectedCompany.status === 'ACTIVE' ? <CheckCircle /> : <Cancel />}
+                    label={selectedCompany.status}
+                    color={selectedCompany.status === 'ACTIVE' ? 'success' : 'error'}
+                  />
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <Typography variant="subtitle2" gutterBottom>Created At</Typography>
+                  <Typography variant="body1" gutterBottom>
+                    {new Date(selectedCompany.createdAt).toLocaleDateString('vi-VN')}
+                  </Typography>
                 </Grid>
                 <Grid item xs={12}>
                   <Typography variant="subtitle2" gutterBottom>Statistics</Typography>
                   <Stack direction="row" spacing={2}>
-                    <Chip label={`${selectedCompany.activeJobs || 0} Jobs`} />
-                    <Chip label={`${selectedCompany.viewCount || 0} Views`} />
-                    <Chip label={`${selectedCompany.followers || 0} Followers`} />
+                    <Chip label={`${selectedCompany.jobsCount || 0} Jobs`} />
+                    {selectedCompany.website && (
+                      <Chip 
+                        label="Website"
+                        onClick={() => window.open(selectedCompany.website, '_blank')}
+                        clickable
+                        icon={<Public />}
+                      />
+                    )}
                   </Stack>
                 </Grid>
                 {selectedCompany.description && (

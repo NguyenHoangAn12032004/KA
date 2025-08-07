@@ -56,6 +56,7 @@ import {
   DoneAll,
   Delete,
   CheckCircle,
+  SmartToy,
 } from "@mui/icons-material";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import AuthDialog from "./AuthDialog";
@@ -212,6 +213,12 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout }) => {
           label: t('savedJobs'),
           path: "/saved-jobs",
           isActive: location.pathname === "/saved-jobs",
+        },
+        {
+          icon: <SmartToy />,
+          label: "Chatbot AI",
+          path: "/chatbot",
+          isActive: location.pathname === "/chatbot",
         }
       );
     } else if (user.role === "COMPANY") {
@@ -233,16 +240,16 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout }) => {
           label: t('analytics'),
           path: "/analytics",
           isActive: location.pathname === "/analytics",
+        },
+        {
+          icon: <SmartToy />,
+          label: "Chatbot AI",
+          path: "/chatbot",
+          isActive: location.pathname === "/chatbot",
         }
       );
     } else if (user.role === "ADMIN") {
       baseItems.push(
-        {
-          icon: <Person />,
-          label: t('candidates'),
-          path: "/candidates",
-          isActive: location.pathname === "/candidates",
-        },
         {
           icon: <Business />,
           label: t('companies'),
@@ -256,10 +263,10 @@ const Navbar: React.FC<NavbarProps> = ({ user, onLogout }) => {
           isActive: location.pathname === "/jobs",
         },
         {
-          icon: <Analytics />,
-          label: t('analytics'),
-          path: "/analytics",
-          isActive: location.pathname === "/analytics",
+          icon: <SmartToy />,
+          label: "Chatbot AI",
+          path: "/chatbot",
+          isActive: location.pathname === "/chatbot",
         }
       );
     }

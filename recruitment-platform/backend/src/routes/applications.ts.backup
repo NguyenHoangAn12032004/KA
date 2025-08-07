@@ -1,570 +1,83 @@
-import express, { Request } from 'express';
+import express from 'express';
 import { PrismaClient } from '@prisma/client';
-import { getApplications, updateApplication } from '../controllers/applications';
-import { authenticateToken, requireRole } from '../middleware/auth';
-import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
-import { v4 as uuidv4 } from 'uuid';
+import { authenticateToken } from '../middleware/auth';
 
 const router = express.Router();
-const prisma =        // 📡🚨 EMIT ANALY        // 📡🚨 EMIT ANALY        // 📡🚨 EMIT ANALYTICS UPDATE EVENTS FOR REAL-TIME DASHBOARD SYNC
-        // Emit analytics-update event for student analytics dashboard
-        io.to(`user-${userId}`).emit('analytics-update', {
-          type: 'application_submit',
-          jobId,
-          applicationId: fullApplication.id,
-          timestamp: new Date()
-        });
+const prisma = new PrismaClient();
 
-        // CRITICAL: Emit global analytics-update for ALL dashboards
-        io.emit('analytics-update', {
-          type: 'application_submit',
-          jobId,
-          companyId: job.companyId,
-          applicationId: fullApplication.id,
-          timestamp: new Date()
-        });
-
-        // Emit dashboard-stats-update for general analytics
-        io.emit('dashboard-stats-update', {
-          type: 'new_application',
-          companyId: job.companyId,
-          jobId,
-          studentId: userId,
-          applicationId: fullApplication.id,
-        timestamp: new Date()
-        }); FOR REAL-TIME DASHBOARD SYNC
-        // Emit analytics-update event for student analytics dashboard
-        io.to(`user-${userId}`).emit('analytics-update', {
-          type: 'application_submit',
-          jobId,
-          applicationId: fullApplication.id,
-          timestamp: new Date()
-        });
-
-        // CRITICAL: Emit global analytics-update event for ALL analytics dashboards
-        io.emit('analytics-update', {
-          type: 'application_submit',
-          jobId,
-          companyId: job.companyId,
-          applicationId: fullApplication.id,
-          timestamp: new Date()
-        });
-
-        // Emit dashboard-stats-update for general analytics
-        io.emit('dashboard-stats-update', {
-          type: 'new_application',
-          companyId: job.companyId,
-          jobId,
-          studentId: userId,
-          applicationId: fullApplication.id,
-        timestamp: new Date()
-        }); FOR REAL-TIME DASHBOARD SYNC
-        // Emit analytics-update event for student analytics dashboard
-        io.to(`user-${userId}`).emit('analytics-update', {
-          type: 'application_submit',
-          jobId,
-          applicationId: fullApplication.id,
-          timestamp: new Date()
-        });
-
-        // CRITICAL: Emit global analytics-update event for ALL analytics dashboards
-        io.emit('analytics-update', {
-          type: 'application_submit',
-          jobId,
-          companyId: job.companyId,
-          applicationId: fullApplication.id,
-          timestamp: new Date()
-        });
-
-        // Emit dashboard-stats-update for general analytics
-        io.emit('dashboard-stats-update', {
-          type: 'new_application',
-          companyId: job.companyId,
-          jobId,
-          studentId: userId,
-          applicationId: fullApplication.id,
-        timestamp: new Date()
-        }););
-
-// Set up multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, '../../uploads/resumes');
-    
-    // Create directory if it doesn't exist
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    cb(null, 'resume-' + uniqueSuffix + ext);
-  }
-});
-
-const upload = multer({ 
-  storage,
-  limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB limit
-  },
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = [
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    ];
-    
-    if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type. Only PDF and Word documents are allowed.') as any);
-    }
-  }
-});
-
-interface AuthRequest extends Request {
-  user?: {
-    id: string;
-    email: string;
-    role: string;
-    companyId?: string;
-  };
-}
-
-router.get('/', authenticateToken, requireRole(['COMPANY', 'HR_MANAGER']), getApplications);
-router.patch('/:id', authenticateToken, requireRole(['COMPANY', 'HR_MANAGER']), updateApplication);
-
-// Update application status specifically
-router.patch('/:id/status', authenticateToken, requireRole(['COMPANY', 'HR_MANAGER']), async (req: AuthRequest, res) => {
-  const { id } = req.params;
-  const { status } = req.body;
-
+// GET /api/applications - Get applications with auth
+router.get('/', authenticateToken, async (req: any, res) => {
   try {
-    const companyId = req.user?.companyId;
-    
-    if (!companyId) {
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    let applications;
+
+    if (userRole === 'STUDENT') {
+      //    return res.status(500).json({
+      success: false,
+      error: 'Failed to update application status'
+    });
+  }
+});
+
+// POST /api/applications/:id/schedule-interview - Schedule interview for application
+router.post('/:id/schedule-interview', authenticateToken, async (req: any, res) => {
+  try {
+    const applicationId = req.params.id;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    // Only companies can schedule interviews
+    if (userRole !== 'COMPANY') {
       return res.status(403).json({
         success: false,
-        error: 'Company ID not found'
+        error: 'Only companies can schedule interviews'
       });
     }
 
-    // Get current application and verify it belongs to the company
-    const currentApp = await prisma.application.findFirst({
-      where: {
-        id,
-        job: {
-          companyId
-        }
-      },
+    // Get company profile
+    const companyProfile = await prisma.company_profiles.findUnique({
+      where: { userId: userId },
+      select: { id: true }
+    });
+
+    if (!companyProfile) {
+      return res.status(404).json({
+        success: false,
+        error: 'Company profile not found'
+      });
+    }
+
+    // Get the application and verify it belongs to company
+    const application = await prisma.applications.findUnique({
+      where: { id: applicationId },
       include: {
-        student: {
-          include: {
-            studentProfile: true
-          }
-        },
-        job: {
-          include: {
-            company_profiles: true
+        jobs: {
+          select: {
+            id: true,
+            companyId: true,
+            title: true
           }
         }
       }
     });
 
-    if (!currentApp) {
+    if (!application) {
       return res.status(404).json({
         success: false,
-        error: 'Application not found or unauthorized'
+        error: 'Application not found'
       });
     }
 
-    // Update status history
-    const statusHistory = JSON.parse(currentApp.statusHistory as string || '[]');
-    statusHistory.push({
-      status,
-      timestamp: new Date().toISOString(),
-      note: `Status updated to ${status}`
-    });
-
-    // Update application
-    const updatedApp = await prisma.application.update({
-      where: { id },
-      data: {
-        status,
-        statusHistory: JSON.stringify(statusHistory),
-        reviewedAt: status !== currentApp.status ? new Date() : undefined,
-        respondedAt: ['ACCEPTED', 'REJECTED'].includes(status) ? new Date() : undefined
-      }
-    });
-
-    // Create notification
-    await prisma.notification.create({
-      data: {
-        userId: currentApp.studentId,
-        type: 'APPLICATION_STATUS_CHANGED',
-        title: 'Trạng thái ứng tuyển đã được cập nhật',
-        message: `Đơn ứng tuyển vị trí ${currentApp.job.title} của bạn đã được cập nhật sang trạng thái mới`,
-        data: {
-          applicationId: id,
-          jobId: currentApp.jobId,
-          oldStatus: currentApp.status,
-          newStatus: status
-        }
-      }
-    });
-
-    // Emit socket event for real-time update
-    const io = req.app.get('io');
-    if (io) {
-      io.to(`user:${currentApp.studentId}`).emit('application-status-changed', {
-        applicationId: id,
-        status,
-        jobTitle: currentApp.job.title,
-        companyName: currentApp.job.company_profiles?.companyName
-      });
-    }
-
-    res.json({
-      success: true,
-      data: {
-        id: updatedApp.id,
-        status: updatedApp.status,
-        message: 'Status updated successfully'
-      }
-    });
-  } catch (error) {
-    console.error('Error updating application status:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to update status'
-    });
-  }
-});
-
-// Upload resume for application
-router.post('/:jobId/resume', authenticateToken, upload.single('resume'), async (req: AuthRequest, res) => {
-  try {
-    const { jobId } = req.params;
-    const userId = req.user?.id;
-    
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        error: 'Authentication required'
-      });
-    }
-
-    // Check if job exists
-    const job = await prisma.job.findUnique({
-      where: { id: jobId }
-    });
-
-    if (!job) {
-      return res.status(404).json({
-        success: false,
-        error: 'Job not found'
-      });
-    }
-
-    // Check if file was uploaded
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        error: 'No file uploaded'
-      });
-    }
-
-    // Generate the URL for the uploaded file
-    const fileUrl = `/uploads/resumes/${req.file.filename}`;
-
-    res.status(200).json({
-      success: true,
-      data: {
-        url: fileUrl,
-        filename: req.file.filename,
-        originalname: req.file.originalname,
-        mimetype: req.file.mimetype,
-        size: req.file.size
-      }
-    });
-  } catch (error) {
-    console.error('Error uploading resume:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to upload resume'
-    });
-  }
-});
-
-// Route for students to submit job applications
-router.post('/', authenticateToken, async (req: AuthRequest, res) => {
-  try {
-    const userId = req.user?.id;
-    
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        error: 'Authentication required'
-      });
-    }
-
-    // Check if the user is a student
-    const user = await prisma.user.findUnique({
-      where: { id: userId }
-    });
-
-    if (!user || user.role !== 'STUDENT') {
+    // Verify the job belongs to the company
+    if (application.jobs.companyId !== companyProfile.id) {
       return res.status(403).json({
         success: false,
-        error: 'Only students can apply for jobs'
+        error: 'You can only schedule interviews for your own job applications'
       });
     }
 
-    const { jobId, coverLetter, customResume } = req.body;
-
-    // Check if job exists
-    const job = await prisma.job.findUnique({
-      where: { id: jobId }
-    });
-
-    if (!job) {
-      return res.status(404).json({
-        success: false,
-        error: 'Job not found'
-      });
-    }
-
-    // Check if the student has already applied for this job
-    const existingApplication = await prisma.application.findUnique({
-      where: {
-        jobId_studentId: {
-          jobId,
-          studentId: userId
-        }
-      }
-    });
-
-    if (existingApplication) {
-      return res.status(409).json({
-        success: false,
-        error: 'You have already applied for this job'
-      });
-    }
-
-    // Tạo transaction để đảm bảo tính nhất quán dữ liệu
-    const [application, updatedJob] = await prisma.$transaction([
-      // Tạo đơn ứng tuyển
-      prisma.application.create({
-        data: {
-          jobId,
-          studentId: userId,
-          coverLetter,
-          customResume,
-          status: 'PENDING',
-          statusHistory: JSON.stringify([
-            {
-              status: 'PENDING',
-              timestamp: new Date().toISOString(),
-              note: 'Application submitted'
-            }
-          ])
-        },
-        include: {
-          job: true
-        }
-      }),
-      
-      // Cập nhật số lượng ứng viên cho công việc
-      prisma.job.update({
-        where: { id: jobId },
-        data: {
-          applicationsCount: {
-            increment: 1
-          }
-        }
-      })
-    ]);
-
-    // Create notification for the student
-    await prisma.notification.create({
-      data: {
-        userId,
-        type: 'APPLICATION_SUBMITTED',
-        title: 'Application Submitted',
-        message: `Your application for ${job.title} has been submitted successfully`,
-        data: {
-          applicationId: application.id,
-          jobId
-        }
-      }
-    });
-
-    // Get the Socket.IO instance
-    const io = req.app.get('io');
-    if (io) {
-      // Get full application data with student info for socket emit
-      const fullApplication = await prisma.application.findUnique({
-        where: { id: application.id },
-        include: {
-          student: {
-            include: {
-              studentProfile: true
-            }
-          },
-          job: true
-        }
-      });
-
-      if (fullApplication) {
-        // Track analytics event
-        try {
-          const analyticsResponse = await fetch('http://localhost:3001/api/analytics/track', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              metric: 'application_submit',
-              userId: userId,
-              jobId: jobId,
-              companyId: job.companyId,
-              value: 1,
-              metadata: {
-                jobTitle: job.title,
-                applicationId: application.id
-              }
-            })
-          });
-          
-          if (analyticsResponse.ok) {
-            console.log('📊 Application analytics tracked successfully');
-          }
-        } catch (error) {
-          console.error('Failed to track application analytics:', error);
-        }
-
-        // Notify the company about the new application
-        io.to(`company-${job.companyId}`).emit('new-application', {
-          id: fullApplication.id,
-          applicationId: fullApplication.id,
-          jobId,
-          status: fullApplication.status,
-          createdAt: fullApplication.appliedAt,
-          student: {
-            firstName: fullApplication.student.studentProfile?.firstName,
-            lastName: fullApplication.student.studentProfile?.lastName,
-            avatar: fullApplication.student.studentProfile?.avatar,
-          },
-          job: {
-            title: job.title
-          }
-        });
-        
-        console.log(`🔔 Socket emit to company-${job.companyId}:`, {
-          applicationId: fullApplication.id,
-          jobTitle: job.title,
-          studentName: `${fullApplication.student.studentProfile?.firstName} ${fullApplication.student.studentProfile?.lastName}`
-        });
-
-        // � TRACK ANALYTICS EVENT
-        // await trackAnalyticsEvent('application_submit', userId, jobId, job.companyId, 1, {
-        //   jobTitle: job.title,
-        //   applicationId: fullApplication.id,
-        //   submittedAt: new Date()
-        // });
-
-        // �🚨 EMIT ANALYTICS UPDATE EVENTS FOR REAL-TIME DASHBOARD SYNC
-        // Emit analytics-update event for student analytics dashboard
-        io.to(`user-${userId}`).emit('analytics-update', {
-          type: 'application_submit',
-          jobId,
-          applicationId: fullApplication.id,
-          timestamp: new Date()
-        });
-
-        // Emit dashboard-stats-update for general analytics
-        io.emit('dashboard-stats-update', {
-          type: 'new_application',
-          companyId: job.companyId,
-          jobId,
-          studentId: userId,
-          applicationId: fullApplication.id,
-        timestamp: new Date()
-        });
-
-        console.log(`📊 Analytics update events emitted for application ${fullApplication.id}`);
-      }
-    }
-
-    res.status(201).json({
-      success: true,
-      data: {
-        application_id: application.id,
-        status: application.status,
-        submitted_at: application.appliedAt,
-        message: 'Application submitted successfully'
-      }
-    });
-  } catch (error) {
-    console.error('Error submitting application:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to submit application'
-    });
-  }
-});
-
-// Route for students to get their applications
-router.get('/student', authenticateToken, async (req: AuthRequest, res) => {
-  try {
-    const userId = req.user?.id;
-    
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        error: 'Authentication required'
-      });
-    }
-
-    // Get all applications for this student
-    const applications = await prisma.application.findMany({
-      where: {
-        studentId: userId
-      },
-      include: {
-        job: {
-          include: {
-            company_profiles: true
-          }
-        }
-      },
-      orderBy: {
-        appliedAt: 'desc'
-      }
-    });
-
-    res.json({
-      success: true,
-      data: applications
-    });
-  } catch (error) {
-    console.error('Error fetching student applications:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch applications'
-    });
-  }
-});
-
-// Lên lịch phỏng vấn cho đơn ứng tuyển
-router.post('/:id/schedule-interview', authenticateToken, requireRole(['COMPANY', 'HR_MANAGER']), async (req: AuthRequest, res) => {
-  try {
-    const { id } = req.params;
     const {
       title,
       description,
@@ -578,28 +91,457 @@ router.post('/:id/schedule-interview', authenticateToken, requireRole(['COMPANY'
       notes
     } = req.body;
 
-    const companyId = req.user?.companyId;
-    
-    if (!companyId) {
+    // Generate unique interview ID
+    const interviewId = `interview-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    // Create the interview
+    const interview = await prisma.interviews.create({
+      data: {
+        id: interviewId,
+        applicationId: applicationId,
+        companyId: companyProfile.id,
+        jobId: application.jobs.id,
+        title,
+        description,
+        type,
+        scheduledAt: new Date(scheduledAt),
+        duration,
+        location,
+        meetingLink,
+        interviewer,
+        interviewerEmail,
+        notes,
+        status: 'SCHEDULED',
+        updatedAt: new Date()
+      }
+    });
+
+    // Update application status to INTERVIEW_SCHEDULED
+    await prisma.applications.update({
+      where: { id: applicationId },
+      data: {
+        status: 'INTERVIEW_SCHEDULED',
+        updatedAt: new Date()
+      }
+    });
+
+    console.log('✅ Interview scheduled successfully:', interview.id);
+
+    return res.status(201).json({
+      success: true,
+      message: 'Interview scheduled successfully',
+      data: interview
+    });
+
+  } catch (error) {
+    console.error('❌ Error scheduling interview:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to schedule interview'
+    });
+  }
+});
+
+export default router;lications for student
+      applications = await prisma.applications.findMany({
+        where: { studentId: userId },
+        include: {
+          jobs: {
+            select: {
+              id: true,
+              title: true,
+              location: true,
+              salaryMin: true,
+              salaryMax: true,
+              currency: true,
+              companyId: true
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+    } else if (userRole === 'COMPANY') {
+      // Get applications for company's jobs
+      // First get the company profile ID
+      const companyProfile = await prisma.company_profiles.findUnique({
+        where: { userId: userId },
+        select: { id: true }
+      });
+
+      if (!companyProfile) {
+        return res.status(404).json({
+          success: false,
+          error: 'Company profile not found'
+        });
+      }
+
+      const companyJobs = await prisma.jobs.findMany({
+        where: { companyId: companyProfile.id },
+        select: { id: true }
+      });
+
+      const jobIds = companyJobs.map(job => job.id);
+
+      applications = await prisma.applications.findMany({
+        where: { jobId: { in: jobIds } },
+        include: {
+          jobs: {
+            select: {
+              id: true,
+              title: true,
+              location: true
+            }
+          },
+          users: {
+            select: {
+              id: true,
+              email: true,
+              student_profiles: {
+                select: {
+                  firstName: true,
+                  lastName: true,
+                  phone: true,
+                  avatar: true,
+                  university: true,
+                  major: true,
+                  graduationYear: true,
+                  skills: true,
+                  experience: true,
+                  portfolio: true,
+                  github: true,
+                  linkedin: true
+                }
+              }
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+    } else {
       return res.status(403).json({
         success: false,
-        error: 'Company ID not found'
+        error: 'Access denied'
       });
     }
 
-    // Kiểm tra đơn ứng tuyển có tồn tại và thuộc về công ty không
-    const application = await prisma.application.findFirst({
-      where: {
-        id,
-        job: {
-          companyId
+    res.json({
+      success: true,
+      data: applications
+    });
+
+  } catch (error) {
+    console.error('Error fetching applications:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch applications'
+    });
+  }
+});
+
+// GET /api/applications/student - Alias for student applications (same as GET /)
+router.get('/student', authenticateToken, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    if (userRole !== 'STUDENT') {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied'
+      });
+    }
+
+    // Get applications for student
+    const applications = await prisma.applications.findMany({
+      where: { studentId: userId },
+      include: {
+        jobs: {
+          select: {
+            id: true,
+            title: true,
+            location: true,
+            salaryMin: true,
+            salaryMax: true,
+            currency: true,
+            companyId: true
+          }
+        },
+        users: {
+          select: {
+            id: true,
+            email: true,
+            student_profiles: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                phone: true,
+                university: true,
+                major: true,
+                graduationYear: true,
+                gpa: true,
+                skills: true,
+                experience: true,
+                portfolio: true,
+                github: true,
+                linkedin: true
+              }
+            }
+          }
         }
       },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json({
+      success: true,
+      data: applications
+    });
+
+  } catch (error) {
+    console.error('Error fetching student applications:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch student applications'
+    });
+  }
+});
+
+// POST /api/applications - Create new application
+router.post('/', authenticateToken, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    const { jobId, coverLetter } = req.body;
+
+    if (userRole !== 'STUDENT') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only students can apply for jobs'
+      });
+    }
+
+    if (!jobId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Job ID is required'
+      });
+    }
+
+    // Check if job exists
+    const job = await prisma.jobs.findUnique({
+      where: { id: jobId },
       include: {
-        job: true,
-        student: {
+        company_profiles: {
+          select: {
+            companyName: true
+          }
+        }
+      }
+    });
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        error: 'Job not found'
+      });
+    }
+
+    // Check if user already applied
+    const existingApplication = await prisma.applications.findFirst({
+      where: {
+        studentId: userId,
+        jobId
+      }
+    });
+
+    if (existingApplication) {
+      return res.status(400).json({
+        success: false,
+        error: 'You have already applied for this job'
+      });
+    }
+
+    // Create application
+    const application = await prisma.applications.create({
+      data: {
+        id: `app-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        studentId: userId,
+        jobId,
+        coverLetter: coverLetter || '',
+        status: 'PENDING',
+        updatedAt: new Date()
+      },
+      include: {
+        jobs: {
+          select: {
+            title: true,
+            companyId: true
+          }
+        }
+      }
+    });
+
+    // Emit real-time event if socket is available
+    const io = (req as any).io;
+    if (io) {
+      // Notify company about new application
+      io.to(`company-${job.companyId}`).emit('new-application-received', {
+        applicationId: application.id,
+        jobId: application.jobId,
+        jobTitle: job.title,
+        studentId: application.studentId,
+        timestamp: new Date()
+      });
+      
+      // Notify student about successful application
+      io.to(`user-${application.studentId}`).emit('application-submitted', {
+        applicationId: application.id,
+        jobTitle: job.title,
+        companyName: job.company_profiles?.companyName,
+        timestamp: new Date()
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      data: application
+    });
+
+  } catch (error) {
+    console.error('Error creating application:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create application'
+    });
+  }
+});
+
+// GET /api/applications/stats - Get application statistics
+router.get('/stats', authenticateToken, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    let stats;
+
+    if (userRole === 'STUDENT') {
+      const applications = await prisma.applications.findMany({
+        where: { studentId: userId },
+        select: { status: true }
+      });
+
+      stats = {
+        total: applications.length,
+        PENDING: applications.filter(app => app.status === 'PENDING').length,
+        REVIEWING: applications.filter(app => app.status === 'REVIEWING').length,
+        SHORTLISTED: applications.filter(app => app.status === 'SHORTLISTED').length,
+        INTERVIEW_SCHEDULED: applications.filter(app => app.status === 'INTERVIEW_SCHEDULED').length,
+        INTERVIEWED: applications.filter(app => app.status === 'INTERVIEWED').length,
+        ACCEPTED: applications.filter(app => app.status === 'ACCEPTED').length,
+        REJECTED: applications.filter(app => app.status === 'REJECTED').length,
+        WITHDRAWN: applications.filter(app => app.status === 'WITHDRAWN').length
+      };
+    } else if (userRole === 'COMPANY') {
+      // First get the company profile ID
+      const companyProfile = await prisma.company_profiles.findUnique({
+        where: { userId: userId },
+        select: { id: true }
+      });
+
+      if (!companyProfile) {
+        return res.status(404).json({
+          success: false,
+          error: 'Company profile not found'
+        });
+      }
+
+      const companyJobs = await prisma.jobs.findMany({
+        where: { companyId: companyProfile.id },
+        select: { id: true }
+      });
+
+      const jobIds = companyJobs.map(job => job.id);
+
+      const applications = await prisma.applications.findMany({
+        where: { jobId: { in: jobIds } },
+        select: { status: true }
+      });
+
+      stats = {
+        total: applications.length,
+        PENDING: applications.filter(app => app.status === 'PENDING').length,
+        REVIEWING: applications.filter(app => app.status === 'REVIEWING').length,
+        SHORTLISTED: applications.filter(app => app.status === 'SHORTLISTED').length,
+        INTERVIEW_SCHEDULED: applications.filter(app => app.status === 'INTERVIEW_SCHEDULED').length,
+        INTERVIEWED: applications.filter(app => app.status === 'INTERVIEWED').length,
+        ACCEPTED: applications.filter(app => app.status === 'ACCEPTED').length,
+        REJECTED: applications.filter(app => app.status === 'REJECTED').length,
+        WITHDRAWN: applications.filter(app => app.status === 'WITHDRAWN').length
+      };
+    } else {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: stats
+    });
+
+  } catch (error) {
+    console.error('Error fetching application stats:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch application stats'
+    });
+  }
+});
+
+// PUT /api/applications/:id/status - Update application status
+router.put('/:id/status', authenticateToken, async (req: any, res) => {
+  try {
+    const applicationId = req.params.id;
+    const { status } = req.body;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    if (userRole !== 'COMPANY') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only companies can update application status'
+      });
+    }
+
+    // Find application with job and student info
+    const application = await prisma.applications.findUnique({
+      where: { id: applicationId },
+      include: {
+        jobs: {
           include: {
-            studentProfile: true
+            company_profiles: {
+              select: {
+                companyName: true,
+                userId: true
+              }
+            }
+          }
+        },
+        users: {
+          include: {
+            student_profiles: {
+              select: {
+                firstName: true,
+                lastName: true,
+                avatar: true,
+                phone: true,
+                university: true,
+                major: true,
+                skills: true
+              }
+            }
           }
         }
       }
@@ -608,196 +550,63 @@ router.post('/:id/schedule-interview', authenticateToken, requireRole(['COMPANY'
     if (!application) {
       return res.status(404).json({
         success: false,
-        error: 'Application not found or unauthorized'
+        error: 'Application not found'
       });
     }
 
-    // Validate required fields
-    if (!title || !type || !scheduledAt || !interviewer || !interviewerEmail) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required fields'
-      });
-    }
-
-    // Validate interview type specific requirements
-    if (type === 'VIDEO' && !meetingLink) {
-      return res.status(400).json({
-        success: false,
-        error: 'Meeting link is required for video interviews'
-      });
-    }
-
-    if (type === 'ONSITE' && !location) {
-      return res.status(400).json({
-        success: false,
-        error: 'Location is required for onsite interviews'
-      });
-    }
-
-    // Generate unique interview ID
-    const interviewId = uuidv4();
-
-    // Tạo cuộc phỏng vấn trong transaction
-    const result = await prisma.$transaction(async (tx) => {
-      // Tạo interview record
-      const interview = await tx.interviews.create({
-        data: {
-          id: interviewId,
-          applicationId: id,
-          companyId,
-          jobId: application.jobId,
-          title,
-          description: description || '',
-          type,
-          scheduledAt: new Date(scheduledAt),
-          duration,
-          location: location || '',
-          meetingLink: meetingLink || '',
-          interviewer,
-          interviewerEmail,
-          status: 'SCHEDULED',
-          notes: notes || '',
-          createdAt: new Date(),
-          updatedAt: new Date()
-        }
-      });
-
-      // Cập nhật trạng thái application thành INTERVIEW_SCHEDULED
-      const updatedApplication = await tx.application.update({
-        where: { id },
-        data: {
-          status: 'INTERVIEW_SCHEDULED',
-          statusHistory: JSON.stringify([
-            ...JSON.parse(application.statusHistory as string || '[]'),
-            {
-              status: 'INTERVIEW_SCHEDULED',
-              timestamp: new Date().toISOString(),
-              note: `Interview scheduled: ${title}`
-            }
-          ])
-        }
-      });
-
-      return { interview, updatedApplication };
-    });
-
-    // Tạo notification cho student
-    await prisma.notification.create({
-      data: {
-        userId: application.studentId,
-        type: 'INTERVIEW_SCHEDULED',
-        title: 'Lịch phỏng vấn đã được sắp xếp',
-        message: `Bạn có lịch phỏng vấn cho vị trí ${application.job.title} vào ${new Date(scheduledAt).toLocaleString('vi-VN')}`,
-        data: {
-          applicationId: id,
-          interviewId: result.interview.id,
-          jobId: application.jobId,
-          scheduledAt
-        }
-      }
-    });
-
-    // Emit socket event for real-time update
-    const io = req.app.get('io');
-    if (io) {
-      // Notify student
-      io.to(`user:${application.studentId}`).emit('interview-scheduled', {
-        applicationId: id,
-        interviewId: result.interview.id,
-        title,
-        scheduledAt,
-        type
-      });
-
-      // Notify company users
-      io.to(`company:${companyId}`).emit('interview-created', {
-        applicationId: id,
-        interviewId: result.interview.id,
-        candidateName: `${application.student.studentProfile?.firstName} ${application.student.studentProfile?.lastName}`,
-        jobTitle: application.job.title
-      });
-    }
-
-    res.status(201).json({
-      success: true,
-      data: {
-        interview: result.interview,
-        message: 'Interview scheduled successfully'
-      }
-    });
-
-  } catch (error) {
-    console.error('Error scheduling interview:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to schedule interview'
-    });
-  }
-});
-
-// Lấy các đơn ứng tuyển gần đây cho công ty
-router.get('/company/recent', authenticateToken, requireRole(['COMPANY', 'HR_MANAGER']), async (req: AuthRequest, res) => {
-  try {
-    const companyId = req.user?.companyId;
-    
-    if (!companyId) {
+    // Check if user owns this company
+    if (application.jobs.company_profiles?.userId !== userId) {
       return res.status(403).json({
         success: false,
-        error: 'Company ID not found'
+        error: 'Not authorized to update this application'
       });
     }
 
-    // Lấy tất cả job của công ty
-    const companyJobs = await prisma.job.findMany({
-      where: { companyId: companyId },
-      select: { id: true }
-    });
-    
-    const jobIds = companyJobs.map(job => job.id);
-    
-    // Lấy 10 đơn ứng tuyển gần đây nhất
-    const recentApplications = await prisma.application.findMany({
-      where: {
-        jobId: { in: jobIds }
-      },
+    // Update application status
+    const updatedApplication = await prisma.applications.update({
+      where: { id: applicationId },
+      data: { status },
       include: {
-        student: {
-          include: {
-            studentProfile: true
+        jobs: {
+          select: {
+            title: true,
+            companyId: true
           }
-        },
-        job: true
-      },
-      orderBy: {
-        appliedAt: 'desc'
-      },
-      take: 10
+        }
+      }
     });
 
-    // Chuyển đổi dữ liệu
-    const transformedApplications = recentApplications.map(app => ({
-      id: app.id,
-      jobId: app.jobId,
-      jobTitle: app.job.title,
-      studentId: app.studentId,
-      studentName: app.student.studentProfile ? `${app.student.studentProfile.firstName} ${app.student.studentProfile.lastName}` : 'Unknown',
-      studentAvatar: app.student.studentProfile?.avatar,
-      status: app.status,
-      appliedAt: app.appliedAt,
-      university: app.student.studentProfile?.university,
-      major: app.student.studentProfile?.major
-    }));
+    // Emit real-time events
+    const io = (req as any).io;
+    if (io) {
+      // Notify student about status change
+      io.to(`user-${application.studentId}`).emit('application-status-changed', {
+        applicationId: applicationId,
+        jobTitle: application.jobs.title,
+        status: status,
+        companyName: application.jobs.company_profiles?.companyName,
+        timestamp: new Date()
+      });
+      
+      // Notify company room about the update
+      io.to(`company-${application.jobs.companyId}`).emit('application-status-updated', {
+        applicationId: applicationId,
+        studentName: `${application.users.student_profiles?.firstName} ${application.users.student_profiles?.lastName}`,
+        status: status,
+        timestamp: new Date()
+      });
+    }
 
     res.json({
       success: true,
-      data: transformedApplications
+      data: updatedApplication
     });
+
   } catch (error) {
-    console.error('Error fetching recent applications:', error);
+    console.error('Error updating application status:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch recent applications'
+      error: 'Failed to update application status'
     });
   }
 });

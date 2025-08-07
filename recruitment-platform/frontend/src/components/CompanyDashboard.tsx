@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Box,
   Container,
@@ -338,9 +338,19 @@ const RecentApplications: React.FC<{ recentApplicationsRefresh: number }> = ({ r
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   
+  // Add loading ref for recent applications to prevent duplicate API calls
+  const isLoadingApplicationsRef = useRef(false);
+
   // Fetch recent applications from API
-  const fetchRecentApplications = async () => {
+  const fetchRecentApplications = useCallback(async () => {
+    // Prevent duplicate calls (React.StrictMode causes double renders in development)
+    if (isLoadingApplicationsRef.current) {
+      console.log('🚫 Skipping fetchRecentApplications - already loading (React.StrictMode causes double renders)');
+      return;
+    }
+
     try {
+      isLoadingApplicationsRef.current = true;
       setLoading(true);
       const response = await companyDashboardAPI.getRecentApplications();
       
@@ -357,13 +367,19 @@ const RecentApplications: React.FC<{ recentApplicationsRefresh: number }> = ({ r
       setApplications([]);
     } finally {
       setLoading(false);
+      isLoadingApplicationsRef.current = false;
     }
-  };
+  }, []);
 
   // Gọi API khi component mount hoặc khi có recentApplicationsRefresh
   useEffect(() => {
-    fetchRecentApplications();
-  }, [recentApplicationsRefresh]);
+    // Add small delay to prevent rapid consecutive calls and smooth out updates
+    const timeoutId = setTimeout(() => {
+      fetchRecentApplications();
+    }, 100); // 100ms delay for smoother UX
+
+    return () => clearTimeout(timeoutId);
+  }, [fetchRecentApplications, recentApplicationsRefresh]);
 
   const handleViewMoreCandidates = () => {
     navigate('/candidates');
@@ -439,19 +455,37 @@ const RecentApplications: React.FC<{ recentApplicationsRefresh: number }> = ({ r
         ) : (
         <List sx={{ p: 0 }}>
           {applications && applications.map((app, index) => (
-            <Fade key={index} in timeout={600 + index * 100}>
+            <Fade 
+              key={app.id || `app-${index}`} 
+              in 
+              timeout={600 + index * 100}
+              style={{ transitionDelay: `${index * 50}ms` }} // Staggered animation
+            >
               <ListItem
                 sx={{
                   p: 2,
                   mb: 1,
                   borderRadius: 2,
-                  transition: "all 0.3s ease",
+                  transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)", 
                   border: `1px solid ${alpha(getStatusColor(app.status), 0.2)}`,
                   background: alpha(getStatusColor(app.status), 0.05),
                   "&:hover": {
                     background: alpha(getStatusColor(app.status), 0.1),
                     transform: "translateX(4px)",
                   },
+                  // Add smooth opacity transition for new items
+                  opacity: 1,
+                  animation: index === 0 ? 'slideInFromRight 0.5s ease-out' : 'none',
+                  '@keyframes slideInFromRight': {
+                    '0%': {
+                      opacity: 0,
+                      transform: 'translateX(20px)'
+                    },
+                    '100%': {
+                      opacity: 1,
+                      transform: 'translateX(0)'
+                    }
+                  }
                 }}
               >
                 <ListItemIcon>
@@ -493,15 +527,15 @@ const RecentApplications: React.FC<{ recentApplicationsRefresh: number }> = ({ r
                     </Box>
                   }
                   secondary={
-                    <Box sx={{ mt: 0.5 }}>
-                      <Typography variant="body2" color="text.primary" fontWeight={500}>
+                    <>
+                      <Typography component="span" variant="body2" color="text.primary" fontWeight={500} sx={{ display: 'block', mt: 0.5 }}>
                         Ứng tuyển: {app.jobTitle}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
+                      <Typography component="span" variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
                         <AccessTime sx={{ fontSize: 14 }} />
                         {app.appliedAt}
                       </Typography>
-                    </Box>
+                    </>
                   }
                 />
               </ListItem>
@@ -711,120 +745,20 @@ const CompanyDashboard: React.FC = () => {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [recentApplicationsRefresh, setRecentApplicationsRefresh] = useState(0);
 
-  useEffect(() => {
-    loadCompanyData();
-  }, [refreshTrigger, user]);
+  // Add refs to prevent duplicate API calls and socket connections
+  const isLoadingRef = useRef(false);
+  const isSocketConnectedRef = useRef(false);
 
-  // Setup realtime updates
-  useEffect(() => {
-    console.log('🚀 CompanyDashboard Socket useEffect STARTED');
-    console.log('🚀 User role:', user?.role, 'CompanyId:', user?.companyId);
-
-    // Setup socket connection for realtime updates
-    if (user?.role === 'COMPANY' && user?.companyId) {
-      console.log('🚀 Setting up socket for company user');
-      try {
-        const token = localStorage.getItem('token');
-        if (token) {
-          console.log('🔌 Setting up socket connection for company:', user.companyId);
-          socketService.connect(token);
-          
-          // Wait a bit for connection then join room
-          setTimeout(() => {
-            const companyId = user.companyId;
-            if (companyId) {
-              console.log('🏢 Joining company room after delay:', companyId);
-              socketService.joinCompanyRoom(companyId);
-            }
-          }, 1000);
-        
-          // Listen for new applications
-          socketService.on('new-application', (applicationData: any) => {
-            console.log('🔔 New application received:', applicationData);
-            
-            // Update stats incrementally for MUI Grid cards
-            setCompanyStats((prev: any) => ({
-              ...prev,
-              totalApplications: prev.totalApplications + 1,
-              weeklyTrends: {
-                ...prev.weeklyTrends,
-                newApplications: prev.weeklyTrends.newApplications + 1
-              }
-            }));
-            
-            // Update applicationsCount for the specific job in jobs list
-            setJobs((prev: any) => prev.map((job: any) => 
-              job.id === applicationData.jobId 
-                ? { ...job, applicationsCount: (job.applicationsCount || 0) + 1 }
-                : job
-            ));
-            
-            // Trigger refresh of recent applications only
-            setRecentApplicationsRefresh(prev => prev + 1);
-            
-            // Show notification
-            toast.success(`Có ứng viên mới ứng tuyển vào vị trí ${applicationData.job?.title}`);
-          });
-
-          // Listen for application status updates
-          socketService.on('applicationStatusUpdate', (updateData: any) => {
-            console.log('📝 Application status updated:', updateData);
-            // Application status updates will be handled by individual components
-          });
-
-          // Listen for job view events
-          socketService.on('job-viewed', (data: any) => {
-            console.log('👁️ Job viewed event received:', data);
-            console.log('📊 Event data:', JSON.stringify(data, null, 2));
-            
-            // Update view count in jobs list using the actual total from server
-            setJobs((prev: any) => {
-              const updatedJobs = prev.map((job: any) => 
-                job.id === data.jobId 
-                  ? { 
-                      ...job, 
-                      viewCount: data.totalViews || ((job.viewCount || 0) + 1),
-                    }
-                  : job
-              );
-              console.log('📊 Jobs updated from', prev.length, 'to', updatedJobs.length, 'items');
-              console.log('📊 Updated job viewCount for', data.jobId, ':', data.totalViews);
-              return updatedJobs;
-            });
-            
-            // Update total views in stats incrementally for MUI Grid cards
-            setCompanyStats((prev: any) => ({
-              ...prev,
-              totalViews: prev.totalViews + 1,
-              weeklyTrends: {
-                ...prev.weeklyTrends,
-                newViews: prev.weeklyTrends.newViews + 1
-              }
-            }));
-            
-            // Force re-render by updating refresh trigger
-            setRefreshTrigger(prev => prev + 1);
-          });
-        }
-      } catch (error) {
-        console.error('Socket connection error:', error);
-      }
+  // Convert to useCallback to prevent duplicate calls
+  const loadCompanyData = useCallback(async () => {
+    // Prevent duplicate calls (React.StrictMode causes double renders in development)
+    if (isLoadingRef.current || !user) {
+      console.log('🚫 Skipping loadCompanyData - already loading or no user (React.StrictMode causes double renders)');
+      return;
     }
 
-    // Cleanup
-    return () => {
-      console.log('🧹 Cleaning up socket listeners');
-      if (socketService) {
-        socketService.off('new-application');
-        socketService.off('applicationStatusUpdate');
-        socketService.off('job-viewed');
-      }
-    };
-  }, [user?.companyId]); // Only depend on companyId to prevent unnecessary reconnections
-
-  // Sửa phần loadCompanyData để xử lý dữ liệu tốt hơn
-  const loadCompanyData = async () => {
     try {
+      isLoadingRef.current = true;
       setLoading(true);
       setDataError(null);
       
@@ -872,9 +806,132 @@ const CompanyDashboard: React.FC = () => {
       toast.error('Không thể tải dữ liệu. Vui lòng thử lại sau.');
     } finally {
       setLoading(false);
+      isLoadingRef.current = false;
     }
-  };
-  
+  }, [user]);
+
+  useEffect(() => {
+    loadCompanyData();
+  }, [loadCompanyData, refreshTrigger]);
+
+  // Setup realtime updates
+  useEffect(() => {
+    console.log('🚀 CompanyDashboard Socket useEffect STARTED');
+    console.log('🚀 User role:', user?.role, 'CompanyId:', user?.companyId);
+
+    // Prevent multiple socket connections (React.StrictMode causes double renders in development)
+    if (isSocketConnectedRef.current) {
+      console.log('🚫 Socket already connected, skipping (React.StrictMode causes double renders)');
+      return;
+    }
+
+    // Setup socket connection for realtime updates
+    if (user?.role === 'COMPANY' && user?.companyId) {
+      console.log('🚀 Setting up socket for company user');
+      try {
+        const token = localStorage.getItem('token');
+        if (token) {
+          console.log('🔌 Setting up socket connection for company:', user.companyId);
+          socketService.connect(token);
+          isSocketConnectedRef.current = true;
+          
+          // Wait a bit for connection then join room
+          setTimeout(() => {
+            const companyId = user.companyId;
+            if (companyId) {
+              console.log('🏢 Joining company room after delay:', companyId);
+              socketService.joinCompanyRoom(companyId);
+            }
+          }, 1000);
+        
+          // Listen for new applications
+          socketService.on('new-application', (applicationData: any) => {
+            console.log('🔔 New application received:', applicationData);
+            
+            // Update stats incrementally for MUI Grid cards (smooth, no flicker)
+            setCompanyStats((prev: any) => ({
+              ...prev,
+              totalApplications: prev.totalApplications + 1,
+              weeklyTrends: {
+                ...prev.weeklyTrends,
+                newApplications: prev.weeklyTrends.newApplications + 1
+              }
+            }));
+            
+            // Update applicationsCount for the specific job in jobs list (smooth, no flicker)
+            setJobs((prev: any) => prev.map((job: any) => 
+              job.id === applicationData.jobId 
+                ? { ...job, applicationsCount: (job.applicationsCount || 0) + 1 }
+                : job
+            ));
+            
+            // FIXED: Instead of direct state update (which doesn't exist in this scope),
+            // use the refresh trigger to update RecentApplications component
+            // This will cause a smooth re-fetch without flickering
+            setRecentApplicationsRefresh(prev => prev + 1);
+            
+            // Show notification
+            toast.success(`Có ứng viên mới ứng tuyển vào vị trí ${applicationData.job?.title || applicationData.jobTitle}`);
+          });
+
+          // Listen for application status updates
+          socketService.on('applicationStatusUpdate', (updateData: any) => {
+            console.log('📝 Application status updated:', updateData);
+            // Application status updates will be handled by individual components
+          });
+
+          // Listen for job view events
+          socketService.on('job-viewed', (data: any) => {
+            console.log('👁️ Job viewed event received:', data);
+            console.log('📊 Event data:', JSON.stringify(data, null, 2));
+            
+            // FIXED: Smooth update without flickering - no force refresh trigger
+            // Update view count in jobs list using the actual total from server
+            setJobs((prev: any) => {
+              const updatedJobs = prev.map((job: any) => 
+                job.id === data.jobId 
+                  ? { 
+                      ...job, 
+                      viewCount: data.totalViews || ((job.viewCount || 0) + 1),
+                    }
+                  : job
+              );
+              console.log('📊 Jobs updated from', prev.length, 'to', updatedJobs.length, 'items');
+              console.log('📊 Updated job viewCount for', data.jobId, ':', data.totalViews);
+              return updatedJobs;
+            });
+            
+            // Update total views in stats incrementally for MUI Grid cards (smooth, no flicker)
+            setCompanyStats((prev: any) => ({
+              ...prev,
+              totalViews: prev.totalViews + 1,
+              weeklyTrends: {
+                ...prev.weeklyTrends,
+                newViews: prev.weeklyTrends.newViews + 1
+              }
+            }));
+            
+            // REMOVED: setRefreshTrigger - this was causing flickering
+          });
+        }
+      } catch (error) {
+        console.error('Socket connection error:', error);
+      }
+    }
+
+    // Cleanup
+    return () => {
+      console.log('🧹 Cleaning up socket listeners');
+      if (socketService) {
+        socketService.off('new-application');
+        socketService.off('applicationStatusUpdate');
+        socketService.off('job-viewed');
+      }
+      // Reset connection ref to allow reconnection
+      isSocketConnectedRef.current = false;
+    };
+  }, [user?.companyId]); // Only depend on companyId to prevent unnecessary reconnections
+
   const handleRefresh = () => {
     setRefreshTrigger(prev => prev + 1);
   };

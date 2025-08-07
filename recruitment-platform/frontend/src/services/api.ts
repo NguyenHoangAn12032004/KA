@@ -448,6 +448,16 @@ export const applicationsAPI = {
       throw error;
     }
   },
+  getByStudentId: async (studentId: string) => {
+    try {
+      const response = await api.get(`/api/applications/student/${studentId}`);
+      console.log(`Get applications for student ${studentId}:`, response);
+      return response;
+    } catch (error) {
+      console.error(`Error getting applications for student ${studentId}:`, error);
+      throw error;
+    }
+  },
   getRecentForCompany: async () => {
     return await api.get('/api/applications/company/recent');
   },
@@ -480,7 +490,7 @@ export const applicationsAPI = {
 
 export const dashboardAPI = {
   getStudentDashboard: async (studentId: string) => {
-    return await api.get(`/api/student-dashboard/${studentId}`);
+    return await api.get(`/api/dashboard/student/${studentId}`);
   },
   saveJob: async (studentId: string, jobId: string) => {
     return await api.post(`/api/users/students/${studentId}/saved-jobs/${jobId}`);

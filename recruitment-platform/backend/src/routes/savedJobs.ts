@@ -25,12 +25,12 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'User authentication required' });
     }
     
-    const savedJobs = await prisma.savedJob.findMany({
+    const savedJobs = await prisma.saved_jobs.findMany({
       where: {
         userId: userId  // Use authenticated user ID
       },
       include: {
-        job: {
+        jobs: {
           include: {
             company_profiles: {
               select: {
@@ -73,7 +73,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
     }
     
     // Check if already saved
-    const existingSave = await prisma.savedJob.findUnique({
+    const existingSave = await prisma.saved_jobs.findUnique({
       where: {
         userId_jobId: {
           userId: userId,  // Use authenticated user ID
@@ -86,13 +86,14 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Job already saved' });
     }
     
-    const savedJob = await prisma.savedJob.create({
+    const savedJob = await prisma.saved_jobs.create({
       data: {
+        id: require('crypto').randomUUID(),
         userId: userId,  // Use authenticated user ID
         jobId: jobId
       },
       include: {
-        job: {
+        jobs: {
           include: {
             company_profiles: {
               select: {
@@ -110,8 +111,8 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
     console.log('✅ Job saved successfully for user:', userId);
 
     // � TRACK ANALYTICS EVENT
-    // await trackAnalyticsEvent('job_saved', userId, jobId, savedJob.job.companyId, 1, {
-    //   jobTitle: savedJob.job.title,
+    // await trackAnalyticsEvent('job_saved', userId, jobId, savedJob.jobs.companyId, 1, {
+    //   jobTitle: savedJob.jobs.title,
     //   savedAt: new Date()
     // });
 
@@ -155,7 +156,7 @@ router.delete('/:jobId', authenticateToken, async (req: Request, res: Response) 
       return res.status(401).json({ error: 'User authentication required' });
     }
     
-    const deletedSave = await prisma.savedJob.delete({
+    const deletedSave = await prisma.saved_jobs.delete({
       where: {
         userId_jobId: {
           userId: userId,  // Use authenticated user ID
@@ -209,7 +210,7 @@ router.get('/check/:jobId', authenticateToken, async (req: Request, res: Respons
       return res.status(401).json({ error: 'User authentication required' });
     }
     
-    const savedJob = await prisma.savedJob.findUnique({
+    const savedJob = await prisma.saved_jobs.findUnique({
       where: {
         userId_jobId: {
           userId: userId,  // Use authenticated user ID

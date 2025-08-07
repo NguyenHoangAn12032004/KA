@@ -103,12 +103,12 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
     const skip = (pageNum - 1) * limitNum;
     
     // Get the count of all matching jobs for pagination
-    const totalCount = await prisma.job.count({
+    const totalCount = await prisma.jobs.count({
       where: filters
     });
     
     // Get jobs with company information
-    const jobs = await prisma.job.findMany({
+    const jobs = await prisma.jobs.findMany({
       where: filters,
       include: {
         company_profiles: {
@@ -121,7 +121,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
         _count: {
           select: {
             applications: true,
-            jobViews: true // Thêm count của jobViews
+            job_views: true // Thêm count của job_views
           }
         }
       },
@@ -137,7 +137,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
     console.log(`🔍 [Jobs API] Checking applications for user: ${userId}`);
     
     if (userId) {
-      const applications = await prisma.application.findMany({
+      const applications = await prisma.applications.findMany({
         where: {
           studentId: userId,
           jobId: { in: jobs.map(job => job.id) }
@@ -162,7 +162,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
     let userSavedJobs: Record<string, boolean> = {};
     
     if (userId) {
-      const savedJobs = await prisma.savedJob.findMany({
+      const savedJobs = await prisma.saved_jobs.findMany({
         where: {
           userId,
           jobId: { in: jobs.map(job => job.id) }
@@ -204,9 +204,9 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
         closingDate: job.applicationDeadline,
         isSaved: !!userSavedJobs[job.id],
         hasApplied: hasApplied,
-        viewCount: job.viewCount || job._count?.jobViews || 0, // Sử dụng jobViews nếu viewCount không tồn tại
+        viewCount: job.viewCount || job._count?.job_views || 0, // Sử dụng job_views nếu viewCount không tồn tại
         applicationsCount: job._count?.applications || 0,
-        viewsCount: job.viewCount || job._count?.jobViews || 0 // Đảm bảo tương thích ngược
+        viewsCount: job.viewCount || job._count?.job_views || 0 // Đảm bảo tương thích ngược
       };
     });
     
@@ -244,12 +244,12 @@ router.get('/saved', authenticateToken, async (req: AuthRequest, res) => {
     }
 
     // Get saved jobs for this user
-    const savedJobs = await prisma.savedJob.findMany({
+    const savedJobs = await prisma.saved_jobs.findMany({
       where: {
         userId: userId
       },
       include: {
-        job: {
+        jobs: {
           include: {
             company_profiles: {
               select: {
@@ -273,23 +273,23 @@ router.get('/saved', authenticateToken, async (req: AuthRequest, res) => {
 
     // Format response
     const formattedJobs = savedJobs.map(savedJob => ({
-      id: savedJob.job.id,
-      title: savedJob.job.title,
+      id: savedJob.jobs.id,
+      title: savedJob.jobs.title,
       company: {
-        id: savedJob.job.companyId,
-        companyName: savedJob.job.company_profiles.companyName,
-        logoUrl: savedJob.job.company_profiles.logo,
-        industry: savedJob.job.company_profiles.industry
+        id: savedJob.jobs.companyId,
+        companyName: savedJob.jobs.company_profiles.companyName,
+        logoUrl: savedJob.jobs.company_profiles.logo,
+        industry: savedJob.jobs.company_profiles.industry
       },
-      location: savedJob.job.location,
-      type: savedJob.job.jobType,
-      workMode: savedJob.job.workMode,
-      experienceLevel: savedJob.job.experienceLevel,
-      salaryMin: savedJob.job.salaryMin,
-      salaryMax: savedJob.job.salaryMax,
-      currency: savedJob.job.currency,
-      publishedAt: savedJob.job.publishedAt,
-      applicationsCount: savedJob.job._count.applications,
+      location: savedJob.jobs.location,
+      type: savedJob.jobs.jobType,
+      workMode: savedJob.jobs.workMode,
+      experienceLevel: savedJob.jobs.experienceLevel,
+      salaryMin: savedJob.jobs.salaryMin,
+      salaryMax: savedJob.jobs.salaryMax,
+      currency: savedJob.jobs.currency,
+      publishedAt: savedJob.jobs.publishedAt,
+      applicationsCount: savedJob.jobs._count?.applications || 0,
       savedAt: savedJob.savedAt
     }));
 
@@ -318,16 +318,16 @@ router.get('/company', authenticateToken, requireRole(['COMPANY', 'HR_MANAGER'])
       });
     }
 
-    const jobs = await prisma.job.findMany({
+    const jobs = await prisma.jobs.findMany({
       where: {
         companyId: companyId
       },
       include: {
         applications: {
           include: {
-            student: {
+            users: {
               include: {
-                studentProfile: true
+                student_profiles: true
               }
             }
           }
@@ -336,7 +336,7 @@ router.get('/company', authenticateToken, requireRole(['COMPANY', 'HR_MANAGER'])
         _count: {
           select: {
             applications: true,
-            jobViews: true
+            job_views: true
           }
         }
       },
@@ -349,13 +349,12 @@ router.get('/company', authenticateToken, requireRole(['COMPANY', 'HR_MANAGER'])
     const formattedJobs = jobs.map(job => ({
       ...job,
       applicationsCount: job._count?.applications || 0,
-      viewsCount: job.viewCount || job._count?.jobViews || 0, // Use stored viewCount, fallback to real-time count
-      viewCount: job.viewCount || job._count?.jobViews || 0, // Ensure both fields are available
+      viewsCount: job.viewCount || job._count?.job_views || 0, // Use stored viewCount, fallback to real-time count
+      viewCount: job.viewCount || job._count?.job_views || 0, // Ensure both fields are available
       // Also make sure _count data is preserved for compatibility
       _count: {
-        ...job._count,
         applications: job._count?.applications || 0,
-        jobViews: job._count?.jobViews || 0
+        job_views: job._count?.job_views || 0
       }
     }));
 
@@ -380,7 +379,7 @@ router.get('/:id', async (req: Request, res) => {
     const userAgent = req.headers['user-agent'];
     const ipAddress = req.ip || req.socket.remoteAddress;
     
-    const job = await prisma.job.findUnique({
+    const job = await prisma.jobs.findUnique({
       where: { id },
       include: {
         company_profiles: true,
@@ -401,14 +400,15 @@ router.get('/:id', async (req: Request, res) => {
     
     // Record the job view consistently using JobView model
     try {
-      // Create a record in job_views table, which will trigger the viewCount update
-      await prisma.jobView.create({
+      // FIXED: Only create one job view record for GET route
+      await prisma.job_views.create({
         data: {
           id: uuid(),
           jobId: id,
           userId: userId || undefined,
           ipAddress: ipAddress || undefined,
-          userAgent: userAgent || undefined
+          userAgent: userAgent || undefined,
+          viewedAt: new Date()
         }
       });
       
@@ -466,7 +466,7 @@ router.get('/:id', async (req: Request, res) => {
     }
     
     // Get the updated job with the current view count
-    const updatedJob = await prisma.job.findUnique({
+    const updatedJob = await prisma.jobs.findUnique({
       where: { id },
       include: {
         company_profiles: true,
@@ -500,7 +500,7 @@ router.post('/:id/view', authenticateToken, async (req: Request, res) => {
     const userAgent = req.headers['user-agent'];
     
     // Get the job to check if it exists and get company info
-    const job = await prisma.job.findUnique({
+    const job = await prisma.jobs.findUnique({
       where: { id },
       include: {
         company_profiles: true,
@@ -521,37 +521,24 @@ router.post('/:id/view', authenticateToken, async (req: Request, res) => {
     
     // Record the job view
     try {
-      await prisma.jobView.create({
+      // FIXED: Only create one job view record, not two!
+      await prisma.job_views.create({
         data: {
           id: uuid(),
           jobId: id,
           userId: userId || undefined,
           ipAddress: ipAddress || undefined,
-          userAgent: userAgent || undefined  
+          userAgent: userAgent || undefined,
+          viewedAt: new Date()
         }
       });
-      
-      // CRITICAL: Record in job_views table for analytics (only for authenticated users)
-      if (userId) {
-        await prisma.jobView.create({
-          data: {
-            id: uuid(),
-            jobId: id,
-            userId: userId,
-            ipAddress: ipAddress || undefined,
-            userAgent: userAgent || undefined,
-            viewedAt: new Date(),
-          },
-        });
-        console.log(`📊 Analytics job view recorded in job_views table for job ${id}, user: ${userId}`);
-      }
       
       console.log(`📊 View recorded for job ${id}, user: ${userId || 'anonymous'}`);
       
       // Emit real-time update to company dashboard
       const io = (req as any).io;
       if (io && job.company_profiles) {
-        const updatedViewCount = await prisma.jobView.count({
+        const updatedViewCount = await prisma.job_views.count({
           where: { jobId: id }
         });
         
@@ -612,7 +599,7 @@ router.post('/:id/view', authenticateToken, async (req: Request, res) => {
     }
     
     // Get the updated job with current counts
-    const updatedJob = await prisma.job.findUnique({
+    const updatedJob = await prisma.jobs.findUnique({
       where: { id },
       include: {
         company_profiles: true,
@@ -653,6 +640,35 @@ router.post('/', authenticateToken, requireRole(['COMPANY', 'HR_MANAGER']), asyn
         error: 'Company ID not found'
       });
     }
+
+    // 🔒 BUSINESS LOGIC: Check if company is verified before allowing job posting
+    const companyProfile = await prisma.company_profiles.findUnique({
+      where: { userId: req.user?.id },
+      select: { 
+        id: true, 
+        isVerified: true, 
+        companyName: true 
+      }
+    });
+
+    if (!companyProfile) {
+      console.log('❌ Company profile not found for user:', req.user?.id);
+      return res.status(403).json({
+        success: false,
+        error: 'Company profile not found'
+      });
+    }
+
+    if (!companyProfile.isVerified) {
+      console.log(`🚫 Company ${companyProfile.companyName} (${companyProfile.id}) is not verified, cannot post jobs`);
+      return res.status(403).json({
+        success: false,
+        error: 'Chỉ các công ty đã được xác thực mới có thể đăng tin tuyển dụng. Vui lòng chờ quản trị viên xác thực tài khoản công ty của bạn.',
+        code: 'COMPANY_NOT_VERIFIED'
+      });
+    }
+
+    console.log(`✅ Company ${companyProfile.companyName} is verified, proceeding with job creation`);
 
     // Format some fields to match the expected types
     const formattedData = {
@@ -706,9 +722,14 @@ router.post('/', authenticateToken, requireRole(['COMPANY', 'HR_MANAGER']), asyn
       }
     }
 
+    // Generate unique ID for the job
+    const jobId = `job-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    dataToCreate.id = jobId;
+    dataToCreate.updatedAt = new Date();
+
     console.log('🔄 Formatted job data để tạo:', JSON.stringify(dataToCreate, null, 2));
 
-    const job = await prisma.job.create({
+    const job = await prisma.jobs.create({
       data: dataToCreate
     });
 
@@ -757,7 +778,7 @@ router.post('/:id/save', authenticateToken, async (req: AuthRequest, res) => {
     }
 
     // Check if job exists
-    const job = await prisma.job.findUnique({
+    const job = await prisma.jobs.findUnique({
       where: { id }
     });
     
@@ -769,7 +790,7 @@ router.post('/:id/save', authenticateToken, async (req: AuthRequest, res) => {
     }
 
     // Check if already saved
-    const existingSave = await prisma.savedJob.findFirst({
+    const existingSave = await prisma.saved_jobs.findFirst({
       where: {
         jobId: id,
         userId: userId
@@ -784,8 +805,9 @@ router.post('/:id/save', authenticateToken, async (req: AuthRequest, res) => {
     }
 
     // Save the job
-    await prisma.savedJob.create({
+    await prisma.saved_jobs.create({
       data: {
+        id: `save-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         jobId: id,
         userId: userId
       }
@@ -818,7 +840,7 @@ router.delete('/:id/save', authenticateToken, async (req: AuthRequest, res) => {
     }
 
     // Delete the saved job record
-    await prisma.savedJob.deleteMany({
+    await prisma.saved_jobs.deleteMany({
       where: {
         jobId: id,
         userId: userId
@@ -852,8 +874,27 @@ router.put('/:id', authenticateToken, requireRole(['COMPANY', 'HR_MANAGER']), as
       });
     }
 
+    // 🔒 BUSINESS LOGIC: Check if company is verified before allowing job updates
+    const companyProfile = await prisma.company_profiles.findUnique({
+      where: { userId: req.user?.id },
+      select: { 
+        id: true, 
+        isVerified: true, 
+        companyName: true 
+      }
+    });
+
+    if (!companyProfile || !companyProfile.isVerified) {
+      console.log(`🚫 Company ${companyProfile?.companyName || 'Unknown'} is not verified, cannot update jobs`);
+      return res.status(403).json({
+        success: false,
+        error: 'Chỉ các công ty đã được xác thực mới có thể cập nhật tin tuyển dụng.',
+        code: 'COMPANY_NOT_VERIFIED'
+      });
+    }
+
     // Check if job belongs to company
-    const existingJob = await prisma.job.findUnique({
+    const existingJob = await prisma.jobs.findUnique({
       where: { id },
       select: { companyId: true }
     });
@@ -880,7 +921,7 @@ router.put('/:id', authenticateToken, requireRole(['COMPANY', 'HR_MANAGER']), as
       updatedAt: new Date()
     };
 
-    const updatedJob = await prisma.job.update({
+    const updatedJob = await prisma.jobs.update({
       where: { id },
       data: formattedUpdateData,
       include: {
@@ -895,7 +936,7 @@ router.put('/:id', authenticateToken, requireRole(['COMPANY', 'HR_MANAGER']), as
         _count: {
           select: {
             applications: true,
-            jobViews: true
+            job_views: true
           }
         }
       }
@@ -915,7 +956,7 @@ router.put('/:id', authenticateToken, requireRole(['COMPANY', 'HR_MANAGER']), as
       data: {
         ...updatedJob,
         applicationsCount: updatedJob._count.applications,
-        viewCount: updatedJob._count.jobViews
+        viewCount: updatedJob._count.job_views
       }
     });
   } catch (error) {
@@ -950,7 +991,7 @@ router.patch('/:id/status', authenticateToken, requireRole(['COMPANY', 'HR_MANAG
     }
 
     // Check if job belongs to company
-    const existingJob = await prisma.job.findUnique({
+    const existingJob = await prisma.jobs.findUnique({
       where: { id },
       select: { companyId: true, isActive: true }
     });
@@ -962,7 +1003,7 @@ router.patch('/:id/status', authenticateToken, requireRole(['COMPANY', 'HR_MANAG
       });
     }
 
-    const updatedJob = await prisma.job.update({
+    const updatedJob = await prisma.jobs.update({
       where: { id },
       data: {
         isActive,
@@ -972,7 +1013,7 @@ router.patch('/:id/status', authenticateToken, requireRole(['COMPANY', 'HR_MANAG
         _count: {
           select: {
             applications: true,
-            jobViews: true
+            job_views: true
           }
         }
       }
@@ -993,7 +1034,7 @@ router.patch('/:id/status', authenticateToken, requireRole(['COMPANY', 'HR_MANAG
       data: {
         ...updatedJob,
         applicationsCount: updatedJob._count.applications,
-        viewCount: updatedJob._count.jobViews
+        viewCount: updatedJob._count.job_views
       },
       message: `Job ${isActive ? 'activated' : 'paused'} successfully`
     });
@@ -1020,7 +1061,7 @@ router.delete('/:id', authenticateToken, requireRole(['COMPANY', 'HR_MANAGER']),
     }
 
     // Check if job belongs to company
-    const existingJob = await prisma.job.findUnique({
+    const existingJob = await prisma.jobs.findUnique({
       where: { id },
       select: { companyId: true }
     });
@@ -1033,7 +1074,7 @@ router.delete('/:id', authenticateToken, requireRole(['COMPANY', 'HR_MANAGER']),
     }
 
     // Delete job (this will cascade delete related records)
-    await prisma.job.delete({
+    await prisma.jobs.delete({
       where: { id }
     });
 
@@ -1073,7 +1114,7 @@ router.get('/:id/applications', authenticateToken, requireRole(['COMPANY', 'HR_M
     }
 
     // Check if job belongs to company
-    const job = await prisma.job.findUnique({
+    const job = await prisma.jobs.findUnique({
       where: { id },
       select: { companyId: true, title: true }
     });
@@ -1093,12 +1134,12 @@ router.get('/:id/applications', authenticateToken, requireRole(['COMPANY', 'HR_M
     }
 
     const [applications, total] = await Promise.all([
-      prisma.application.findMany({
+      prisma.applications.findMany({
         where: whereClause,
         include: {
-          student: {
+          users: {
             include: {
-              studentProfile: {
+              student_profiles: {
                 select: {
                   id: true,
                   firstName: true,
@@ -1123,7 +1164,7 @@ router.get('/:id/applications', authenticateToken, requireRole(['COMPANY', 'HR_M
         skip,
         take: parseInt(limit as string)
       }),
-      prisma.application.count({
+      prisma.applications.count({
         where: whereClause
       })
     ]);
@@ -1137,23 +1178,23 @@ router.get('/:id/applications', authenticateToken, requireRole(['COMPANY', 'HR_M
       rating: app.rating,
       hrNotes: app.hrNotes,
       feedback: app.feedback,
-      student: {
-        id: app.student.id,
-        email: app.student.email,
-        firstName: app.student.studentProfile?.firstName || '',
-        lastName: app.student.studentProfile?.lastName || '',
-        fullName: `${app.student.studentProfile?.firstName || ''} ${app.student.studentProfile?.lastName || ''}`.trim(),
-        avatar: app.student.studentProfile?.avatar,
-        major: app.student.studentProfile?.major,
-        university: app.student.studentProfile?.university,
-        graduationYear: app.student.studentProfile?.graduationYear,
-        skills: app.student.studentProfile?.skills || [],
-        experience: app.student.studentProfile?.experience,
-        phone: app.student.studentProfile?.phone,
-        portfolio: app.student.studentProfile?.portfolio,
-        github: app.student.studentProfile?.github,
-        linkedin: app.student.studentProfile?.linkedin,
-        resume: app.student.studentProfile?.resume
+      users: {
+        id: app.users.id,
+        email: app.users.email,
+        firstName: app.users.student_profiles?.firstName || '',
+        lastName: app.users.student_profiles?.lastName || '',
+        fullName: `${app.users.student_profiles?.firstName || ''} ${app.users.student_profiles?.lastName || ''}`.trim(),
+        avatar: app.users.student_profiles?.avatar,
+        major: app.users.student_profiles?.major,
+        university: app.users.student_profiles?.university,
+        graduationYear: app.users.student_profiles?.graduationYear,
+        skills: app.users.student_profiles?.skills || [],
+        experience: app.users.student_profiles?.experience,
+        phone: app.users.student_profiles?.phone,
+        portfolio: app.users.student_profiles?.portfolio,
+        github: app.users.student_profiles?.github,
+        linkedin: app.users.student_profiles?.linkedin,
+        resume: app.users.student_profiles?.resume
       }
     }));
 
@@ -1180,3 +1221,4 @@ router.get('/:id/applications', authenticateToken, requireRole(['COMPANY', 'HR_M
 });
 
 export default router;
+

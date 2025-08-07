@@ -45,6 +45,7 @@ import {
 import { notificationsAPI } from '../services/api';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
+import NotificationDetailModal from './NotificationDetailModal';
 
 interface Notification {
   id: string;
@@ -53,6 +54,7 @@ interface Notification {
   type: 'APPLICATION_SUBMITTED' | 'APPLICATION_STATUS_CHANGED' | 'NEW_JOB_POSTED' | 'INTERVIEW_SCHEDULED' | 'MESSAGE_RECEIVED' | 'SYSTEM_ANNOUNCEMENT';
   isRead: boolean;
   createdAt: string;
+  readAt?: string;
   data?: any;
 }
 
@@ -66,6 +68,7 @@ const NotificationsPage: React.FC = () => {
   const [readFilter, setReadFilter] = useState('all');
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
   const itemsPerPage = 10;
 
   useEffect(() => {
@@ -233,6 +236,30 @@ const NotificationsPage: React.FC = () => {
     }
   };
 
+  const handleNotificationClick = (notification: Notification) => {
+    setSelectedNotification(notification);
+    setDetailModalOpen(true);
+    
+    // Mark as read if not already read
+    if (!notification.isRead) {
+      handleMarkAsRead(notification.id);
+    }
+  };
+
+  const handleDetailModalClose = () => {
+    setDetailModalOpen(false);
+    setSelectedNotification(null);
+  };
+
+  const handleMarkReadFromModal = (id: string) => {
+    handleMarkAsRead(id);
+  };
+
+  const handleDeleteFromModal = (id: string) => {
+    setNotifications(prev => prev.filter(notification => notification.id !== id));
+    toast.success('Đã xóa thông báo');
+  };
+
   const formatTimeAgo = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -385,10 +412,18 @@ const NotificationsPage: React.FC = () => {
                         : `4px solid ${theme.palette.primary.main}`,
                       '&:hover': {
                         background: alpha(theme.palette.primary.main, 0.08),
+                        cursor: 'pointer'
                       }
                     }}
+                    onClick={() => handleNotificationClick(notification)}
                     secondaryAction={
-                      <IconButton edge="end" onClick={(e) => handleMenuClick(e, notification)}>
+                      <IconButton 
+                        edge="end" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleMenuClick(e, notification);
+                        }}
+                      >
                         <MoreVert />
                       </IconButton>
                     }
@@ -494,6 +529,15 @@ const NotificationsPage: React.FC = () => {
           <ListItemText>Xóa thông báo</ListItemText>
         </MenuItem>
       </Menu>
+
+      {/* Notification Detail Modal */}
+      <NotificationDetailModal
+        notification={selectedNotification}
+        open={detailModalOpen}
+        onClose={handleDetailModalClose}
+        onMarkRead={handleMarkReadFromModal}
+        onDelete={handleDeleteFromModal}
+      />
     </Container>
   );
 };

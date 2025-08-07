@@ -11,7 +11,8 @@ import {
   ListItemText,
   alpha,
   useTheme,
-  CircularProgress
+  CircularProgress,
+  Fade
 } from '@mui/material';
 import {
   Notifications,
@@ -22,26 +23,43 @@ import {
   CheckCircle,
   Schedule,
   Error,
-  Info
+  Info,
+  Send,
+  Visibility,
+  BookmarkAdd,
+  EventAvailable
 } from '@mui/icons-material';
 import { notificationsAPI } from '../services/api';
 import { toast } from 'react-toastify';
+import socketService from '../services/socketService';
+import { useAuth } from '../contexts/AuthContext';
+import NotificationDetailModal from './NotificationDetailModal';
 
 interface Notification {
   id: string;
   title: string;
   message: string;
-  type: 'APPLICATION_SUBMITTED' | 'APPLICATION_STATUS_CHANGED' | 'NEW_JOB_POSTED' | 'INTERVIEW_SCHEDULED' | 'MESSAGE_RECEIVED' | 'SYSTEM_ANNOUNCEMENT';
+  type: 'APPLICATION_SUBMITTED' | 'APPLICATION_STATUS_CHANGED' | 'NEW_JOB_POSTED' | 'INTERVIEW_SCHEDULED' | 'MESSAGE_RECEIVED' | 'SYSTEM_ANNOUNCEMENT' |
+         'JOB_VIEWED' | 'JOB_SAVED' | 'JOB_APPLICATION' | 'INTERVIEW_SCHEDULED' | 'PROFILE_UPDATED';
   isRead: boolean;
   createdAt: string;
+  readAt?: string;
+  jobTitle?: string;
+  companyName?: string;
+  icon?: React.ReactElement;
+  color?: string;
+  data?: any; // Additional data from realtime updates
 }
 
 const NotificationsMenu: React.FC = () => {
   const theme = useTheme();
+  const { user } = useAuth();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
 
   const open = Boolean(anchorEl);
 
@@ -53,6 +71,24 @@ const NotificationsMenu: React.FC = () => {
       setUnreadCount(0);
     }
   }, [notifications]);
+  
+  // Setup socket listeners for real-time notifications
+  useEffect(() => {
+    if (user?.id) {
+      setupSocketListeners();
+      // Load initial notifications
+      loadNotifications();
+    }
+    
+    return () => {
+      // Cleanup socket listeners
+      socketService.off('student-dashboard-update');
+      socketService.off('job-view-updated');
+      socketService.off('application-updated');
+      socketService.off('profile-updated');
+      socketService.off('interview-scheduled');
+    };
+  }, [user?.id]);
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -62,58 +98,257 @@ const NotificationsMenu: React.FC = () => {
   const handleClose = () => {
     setAnchorEl(null);
   };
+  
+  const setupSocketListeners = () => {
+    if (!user?.id) return;
+    
+    // Listen for new notifications (IMPORTANT: This was missing!)
+    socketService.on('notification:new', (notification: any) => {
+      console.log('📨 [NotificationsMenu] Received new notification:', notification);
+      
+      // Add new notification to the list
+      setNotifications(prev => {
+        const newNotifications = [notification, ...prev];
+        return newNotifications.slice(0, 20); // Keep only recent 20
+      });
+      
+      // Update unread count
+      setUnreadCount(prevCount => prevCount + 1);
+      
+      // Show toast notification
+      toast.success(`Thông báo mới: ${notification.title}`, {
+        position: "top-right",
+        autoClose: 5000,
+      });
+    });
+
+    // Listen for notification updates
+    socketService.on('notification:updated', (notification: any) => {
+      console.log('📝 [NotificationsMenu] Notification updated:', notification);
+      
+      // Update existing notification
+      setNotifications(prev => 
+        prev.map(n => n.id === notification.id ? notification : n)
+      );
+    });
+    
+    // Listen for dashboard-specific updates
+    socketService.on('student-dashboard-update', (update: any) => {
+      console.log('📊 [NotificationsMenu] Received dashboard update:', update);
+      handleRealtimeUpdate(update);
+    });
+
+    // Listen for job view updates
+    socketService.on('job-view-updated', (data: any) => {
+      console.log('👁️ [NotificationsMenu] Job view update:', data);
+      handleRealtimeUpdate({
+        type: 'job_viewed',
+        data,
+        timestamp: new Date()
+      });
+    });
+
+    // Listen for application updates
+    socketService.on('application-updated', (data: any) => {
+      console.log('📝 [NotificationsMenu] Application update:', data);
+      handleRealtimeUpdate({
+        type: 'application_updated',
+        data,
+        timestamp: new Date()
+      });
+    });
+
+    // Listen for profile updates
+    socketService.on('profile-updated', (data: any) => {
+      console.log('👤 [NotificationsMenu] Profile update:', data);
+      handleRealtimeUpdate({
+        type: 'profile_updated',
+        data,
+        timestamp: new Date()
+      });
+    });
+    
+    // Listen for interview scheduling
+    socketService.on('interview-scheduled', (data: any) => {
+      console.log('📅 [NotificationsMenu] Interview scheduled:', data);
+      handleRealtimeUpdate({
+        type: 'interview_scheduled',
+        data,
+        timestamp: new Date()
+      });
+    });
+  };
+  
+  const handleRealtimeUpdate = (update: any) => {
+    // Create a new notification from the realtime update
+    const notification: Notification = mapUpdateToNotification(update);
+    
+    // Add to notifications list with smooth animation
+    setNotifications(prev => {
+      const newNotifications = [notification, ...prev];
+      // Keep only the most recent 20 notifications
+      return newNotifications.slice(0, 20);
+    });
+    
+    // Update unread count
+    setUnreadCount(prevCount => prevCount + 1);
+    
+    // Show a toast for the new notification with proper styling based on notification type
+    let toastType = 'info';
+    
+    switch (update.type) {
+      case 'interview_scheduled':
+        toastType = 'success';
+        break;
+      case 'application_updated':
+        toastType = 'success';
+        break;
+      case 'profile_updated':
+        toastType = 'info';
+        break;
+      default:
+        toastType = 'info';
+    }
+    
+    toast[toastType as 'info' | 'success'](notification.title, {
+      position: "bottom-right",
+      autoClose: 5000,
+      hideProgressBar: false,
+      style: {
+        background: notification.color || theme.palette.info.main,
+        color: 'white',
+        borderRadius: '12px',
+        fontSize: '14px'
+      }
+    });
+  };
+  
+  const mapUpdateToNotification = (update: any): Notification => {
+    const timestamp = update.timestamp || new Date();
+    const id = `notification-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const data = update.data || {};
+    
+    // Default notification
+    let notification: Notification = {
+      id,
+      title: 'Thông báo mới',
+      message: 'Bạn có thông báo mới',
+      type: 'SYSTEM_ANNOUNCEMENT',
+      isRead: false,
+      createdAt: timestamp instanceof Date ? timestamp.toISOString() : new Date().toISOString(),
+      color: theme.palette.info.main
+    };
+    
+    // Map based on type
+    switch (update.type) {
+      case 'job_viewed':
+        notification = {
+          ...notification,
+          title: `Đã xem việc làm: ${data.jobTitle || 'Công việc'}`,
+          message: `Bạn đã xem việc làm ${data.jobTitle || ''} tại ${data.companyName || ''}`,
+          type: 'JOB_VIEWED',
+          jobTitle: data.jobTitle,
+          companyName: data.companyName,
+          icon: <Visibility />,
+          color: theme.palette.info.main
+        };
+        break;
+        
+      case 'job_saved':
+        notification = {
+          ...notification,
+          title: `Đã lưu việc làm: ${data.jobTitle || 'Công việc'}`,
+          message: `Bạn đã lưu việc làm ${data.jobTitle || ''} tại ${data.companyName || ''}`,
+          type: 'JOB_SAVED',
+          jobTitle: data.jobTitle,
+          companyName: data.companyName,
+          icon: <BookmarkAdd />,
+          color: theme.palette.secondary.main
+        };
+        break;
+        
+      case 'application_updated':
+        notification = {
+          ...notification,
+          title: `Cập nhật ứng tuyển: ${data.jobTitle || 'Công việc'}`,
+          message: `Đơn ứng tuyển vào ${data.jobTitle || 'công việc'} tại ${data.companyName || ''} đã được cập nhật sang trạng thái ${data.status || ''}`,
+          type: 'APPLICATION_STATUS_CHANGED',
+          jobTitle: data.jobTitle,
+          companyName: data.companyName,
+          icon: <Send />,
+          color: theme.palette.primary.main
+        };
+        break;
+        
+      case 'interview_scheduled':
+        // Extract job title and company name from either data directly or nested objects
+        const jobTitle = data.jobTitle || data.job?.title || data.title || 'Công việc';
+        const companyName = data.companyName || data.company?.companyName || data.company || '';
+        const scheduledTime = data.scheduledAt ? new Date(data.scheduledAt).toLocaleString('vi-VN') : 'thời gian đã định';
+        
+        notification = {
+          ...notification,
+          title: `Lịch phỏng vấn mới: ${jobTitle}`,
+          message: `Bạn có lịch phỏng vấn cho vị trí ${jobTitle} tại ${companyName} vào ${scheduledTime}`,
+          type: 'INTERVIEW_SCHEDULED',
+          jobTitle: jobTitle,
+          companyName: companyName,
+          icon: <EventAvailable />,
+          color: theme.palette.success.main
+        };
+        break;
+        
+      case 'profile_updated':
+        notification = {
+          ...notification,
+          title: 'Hồ sơ đã cập nhật',
+          message: 'Hồ sơ của bạn đã được cập nhật thành công',
+          type: 'PROFILE_UPDATED',
+          icon: <Person />,
+          color: theme.palette.warning.main
+        };
+        break;
+    }
+    
+    return notification;
+  };
 
   const loadNotifications = async () => {
     try {
       setLoading(true);
+      console.log('📬 [NotificationsMenu] Loading notifications...');
+      
       // Gọi API để lấy thông báo
-      // Nếu API chưa được triển khai, sử dụng dữ liệu mẫu
       try {
         const response = await notificationsAPI.getAll({ unread_only: false, page: 1 });
-        // Handle different response structures
-        const notificationsData = (response as any).notifications || response.data || (response as any) || [];
-        setNotifications(Array.isArray(notificationsData) ? notificationsData : []);
-      } catch (error) {
-        console.error("Error loading notifications:", error);
-        // Sử dụng dữ liệu mẫu nếu API lỗi
-        setNotifications([
-          {
-            id: '1',
-            title: 'Ứng viên mới',
-            message: 'Nguyễn Văn A đã ứng tuyển vào vị trí Frontend Developer',
-            type: 'APPLICATION_SUBMITTED',
-            isRead: false,
-            createdAt: new Date().toISOString()
-          },
-          {
-            id: '2',
-            title: 'Lịch phỏng vấn',
-            message: 'Phỏng vấn với Trần Thị B vào lúc 15:00 ngày mai',
-            type: 'INTERVIEW_SCHEDULED',
-            isRead: false,
-            createdAt: new Date().toISOString()
-          },
-          {
-            id: '3',
-            title: 'Tin nhắn mới',
-            message: 'Bạn có tin nhắn mới từ Lê Văn C',
-            type: 'MESSAGE_RECEIVED',
-            isRead: true,
-            createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-          },
-          {
-            id: '4',
-            title: 'Cập nhật trạng thái',
-            message: 'Đơn ứng tuyển của Phạm Thị D đã được chuyển sang trạng thái "Đã phỏng vấn"',
-            type: 'APPLICATION_STATUS_CHANGED',
-            isRead: true,
-            createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
-          }
-        ]);
+        console.log('📬 [NotificationsMenu] API Response:', response);
+        console.log('📬 [NotificationsMenu] Response data:', response.data);
+        
+        // Handle different response structures - fix the parsing
+        const responseData = response.data || response;
+        const notificationsData = responseData.notifications || responseData.data || [];
+        const validNotifications = Array.isArray(notificationsData) ? notificationsData : [];
+        
+        console.log('📬 [NotificationsMenu] Response data notifications:', notificationsData);
+        console.log('📬 [NotificationsMenu] Setting notifications:', validNotifications);
+        setNotifications(validNotifications);
+        
+        if (validNotifications.length === 0) {
+          console.log('📬 [NotificationsMenu] No notifications found, using empty array');
+        } else {
+          console.log(`📬 [NotificationsMenu] Successfully loaded ${validNotifications.length} notifications`);
+        }
+      } catch (apiError) {
+        console.error("📬 [NotificationsMenu] API Error:", apiError);
+        
+        // Set empty array instead of mock data for cleaner testing
+        console.log('📬 [NotificationsMenu] Setting empty notifications due to API error');
+        setNotifications([]);
       }
     } catch (error) {
-      console.error("Error loading notifications:", error);
+      console.error("📬 [NotificationsMenu] General Error:", error);
       toast.error("Không thể tải thông báo");
+      setNotifications([]);
     } finally {
       setLoading(false);
     }
@@ -148,20 +383,56 @@ const NotificationsMenu: React.FC = () => {
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'APPLICATION_SUBMITTED':
-        return <Person color="primary" />;
+        return <Send color="primary" />;
       case 'APPLICATION_STATUS_CHANGED':
         return <CheckCircle color="success" />;
       case 'NEW_JOB_POSTED':
         return <Work color="info" />;
       case 'INTERVIEW_SCHEDULED':
-        return <Schedule color="warning" />;
+        return <EventAvailable color="warning" />;
       case 'MESSAGE_RECEIVED':
         return <Message color="secondary" />;
       case 'SYSTEM_ANNOUNCEMENT':
         return <Info color="info" />;
+      case 'JOB_VIEWED':
+        return <Visibility color="info" />;
+      case 'JOB_SAVED':
+        return <BookmarkAdd color="secondary" />;
+      case 'JOB_APPLICATION':
+        return <Send color="primary" />;
+      case 'PROFILE_UPDATED':
+        return <Person color="warning" />;
       default:
         return <NotificationsActive color="primary" />;
     }
+  };
+
+  const handleNotificationClick = (notification: Notification) => {
+    setSelectedNotification(notification);
+    setDetailModalOpen(true);
+    handleClose();
+    
+    // Mark as read if not already read
+    if (!notification.isRead) {
+      markAsRead(notification.id);
+    }
+  };
+
+  const handleDetailModalClose = () => {
+    setDetailModalOpen(false);
+    setSelectedNotification(null);
+  };
+
+  const handleMarkReadFromModal = (id: string) => {
+    markAsRead(id);
+  };
+
+  const handleDeleteFromModal = (id: string) => {
+    setNotifications(prevNotifications => {
+      if (!Array.isArray(prevNotifications)) return prevNotifications;
+      return prevNotifications.filter(notification => notification.id !== id);
+    });
+    toast.success('Đã xóa thông báo');
   };
 
   const formatTimeAgo = (dateString: string) => {
@@ -255,23 +526,20 @@ const NotificationsMenu: React.FC = () => {
           </Box>
         ) : (
           notifications.map((notification) => (
-            <MenuItem 
+            <MenuItem
               key={notification.id}
-              onClick={() => {
-                markAsRead(notification.id);
-                handleClose();
-              }}
+              onClick={() => handleNotificationClick(notification)}
               sx={{ 
                 p: 2,
-                borderLeft: notification.isRead ? 'none' : `4px solid ${theme.palette.primary.main}`,
-                background: notification.isRead ? 'transparent' : alpha(theme.palette.primary.main, 0.05),
+                borderLeft: notification.isRead ? 'none' : `4px solid ${notification.color || theme.palette.primary.main}`,
+                background: notification.isRead ? 'transparent' : alpha(notification.color || theme.palette.primary.main, 0.05),
                 '&:hover': {
-                  background: alpha(theme.palette.primary.main, 0.1)
+                  background: alpha(notification.color || theme.palette.primary.main, 0.1)
                 }
               }}
             >
               <ListItemIcon>
-                {getNotificationIcon(notification.type)}
+                {notification.icon || getNotificationIcon(notification.type)}
               </ListItemIcon>
               <ListItemText 
                 primary={
@@ -291,6 +559,16 @@ const NotificationsMenu: React.FC = () => {
                     >
                       {notification.message}
                     </Typography>
+                    {notification.companyName && (
+                      <Typography 
+                        variant="body2" 
+                        color="text.primary"
+                        fontWeight={600}
+                        sx={{ display: 'block', mt: 0.5 }}
+                      >
+                        {notification.companyName}
+                      </Typography>
+                    )}
                     <Typography 
                       variant="caption" 
                       color="text.secondary"
@@ -318,6 +596,15 @@ const NotificationsMenu: React.FC = () => {
           <Typography variant="body2" fontWeight={600}>Xem tất cả thông báo</Typography>
         </MenuItem>
       </Menu>
+
+      {/* Notification Detail Modal */}
+      <NotificationDetailModal
+        notification={selectedNotification}
+        open={detailModalOpen}
+        onClose={handleDetailModalClose}
+        onMarkRead={handleMarkReadFromModal}
+        onDelete={handleDeleteFromModal}
+      />
     </Box>
   );
 };

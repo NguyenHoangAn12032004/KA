@@ -105,6 +105,8 @@ import { useNavigate } from "react-router-dom";
 import LinkedInIcon from '@mui/icons-material/LinkedIn';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import LanguageIcon from '@mui/icons-material/Language';
+import realtimeStudentService from '../services/realtimeStudentService';
+import socketService from '../services/socketService';
 
 // Modern animations
 const gradientAnimation = keyframes`
@@ -728,61 +730,328 @@ const StudentDashboard: React.FC = () => {
   const [interviews, setInterviews] = useState<any[]>([]);
   const [profileData, setProfileData] = useState<any>(null);
   const [activeTab, setActiveTab] = useState(0);
+  const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
+  
+  // Progress data state
+  const [profileCompletion, setProfileCompletion] = useState(0);
+  const [totalSkills, setTotalSkills] = useState(0);
+  const [totalProjects, setTotalProjects] = useState(0);
+  const [totalCertifications, setTotalCertifications] = useState(0);
   const navigate = useNavigate();
 
   useEffect(() => {
-    loadDashboardData();
+    if (user?.id) {
+      initializeRealtimeConnection();
+      // Also load initial data directly to ensure we have something to display
+      loadDashboardData();
+    }
+    return () => {
+      // Cleanup
+      realtimeStudentService.off('data-updated');
+      realtimeStudentService.off('job_viewed');
+      realtimeStudentService.off('job_saved');
+      realtimeStudentService.off('job_unsaved');
+      realtimeStudentService.off('application_created');
+      realtimeStudentService.off('application_updated');
+      realtimeStudentService.off('profile_updated');
+      realtimeStudentService.off('interview_scheduled');
+      realtimeStudentService.off('stats_updated');
+    };
     // eslint-disable-next-line
   }, [user?.id]);
 
-  const loadDashboardData = async () => {
+  const initializeRealtimeConnection = async () => {
     if (!user?.id) return;
+
     try {
       setLoading(true);
-      const res = await dashboardAPI.getStudentDashboard(user.id);
       
-      if (res.data?.success && res.data?.data) {
-        const data = res.data.data;
-        // Debug log
-        console.log('Dashboard data received:', data);
-        console.log('Profile data:', data.profile);
-        
-        // Dữ liệu đã được định dạng từ backend
-        setViewedJobs(data.viewedJobs || []);
-        setSavedJobs(data.savedJobs || []);
-        setApplications(data.applications || []);
-        setInterviews(data.interviews || []);
-        
-        // Lấy dữ liệu profile từ API hoặc từ user context
-        const profileFromAPI = data.profile || {};
-        const profileFromUser = user.studentProfile || {};
-        
-        // Kết hợp dữ liệu từ API và từ user context
-        const combinedProfile = {
-          ...profileFromUser,
-          ...profileFromAPI,
-          // Đảm bảo các trường quan trọng luôn có giá trị
-          profile_completion: profileFromAPI.profile_completion || profileFromUser.profile_completion || 0,
-          skills: profileFromAPI.skills || profileFromUser.skills || [],
-          projects: profileFromAPI.projects || profileFromUser.projects || [],
-          github: profileFromAPI.github || profileFromUser.github || '',
-          linkedin: profileFromAPI.linkedin || profileFromUser.linkedin || '',
-          portfolio: profileFromAPI.portfolio || profileFromUser.portfolio || ''
-        };
-        
-        // Log dữ liệu kết hợp
-        console.log('Combined profile data:', combinedProfile);
-        
-        // Lưu dữ liệu profile
-        setProfileData(combinedProfile);
-      } else {
-        // Fallback nếu không có dữ liệu từ API, sử dụng dữ liệu từ user context
-        if (user.studentProfile) {
-          setProfileData(user.studentProfile);
-          console.log('Using profile data from user context:', user.studentProfile);
+      // Connect socket if not connected
+      const token = localStorage.getItem('token');
+      if (token && !socketService.isConnected) {
+        socketService.connect(token);
+      }
+
+      // Initialize realtime service
+      await realtimeStudentService.initialize(user.id);
+
+      // Set up listeners for real-time updates
+      realtimeStudentService.on('data-updated', handleDataUpdate);
+      realtimeStudentService.on('job_viewed', handleJobViewed);
+      realtimeStudentService.on('job_saved', handleJobSaved);  
+      realtimeStudentService.on('job_unsaved', handleJobUnsaved);
+      realtimeStudentService.on('application_created', handleApplicationCreated);
+      realtimeStudentService.on('application_updated', handleApplicationUpdated);
+      realtimeStudentService.on('profile_updated', handleProfileUpdated);
+      realtimeStudentService.on('interview_scheduled', handleInterviewScheduled);
+      realtimeStudentService.on('stats_updated', handleStatsUpdated);
+
+      // Update connection status
+      setIsRealtimeConnected(realtimeStudentService.isRealtimeConnected());
+
+      console.log('🎯 [StudentDashboard] Realtime connection initialized');
+    } catch (error) {
+      console.error('❌ [StudentDashboard] Failed to initialize realtime connection:', error);
+      toast.error('Không thể kết nối realtime. Trang sẽ hoạt động ở chế độ thường.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDataUpdate = (data: any) => {
+    console.log('📊 [StudentDashboard] Data updated:', data);
+    
+    // Update state with smooth animations
+    if (data.viewedJobs !== undefined) setViewedJobs(data.viewedJobs || []);
+    if (data.savedJobs !== undefined) setSavedJobs(data.savedJobs || []);
+    if (data.applications !== undefined) setApplications(data.applications || []);
+    if (data.interviews !== undefined) setInterviews(data.interviews || []);
+    if (data.profile !== undefined) setProfileData(data.profile);
+    
+    // Show subtle notification for major updates
+    if (data.applications && data.applications.length > applications.length) {
+      toast.success('🎉 Dữ liệu ứng tuyển đã được cập nhật!', {
+        position: "bottom-right",
+        autoClose: 3000,
+        hideProgressBar: true,
+        pauseOnHover: false,
+        style: {
+          background: theme.palette.success.main,
+          color: 'white',
+          borderRadius: '12px',
+          fontSize: '14px'
         }
+      });
+    }
+    
+    // Update connection status
+    setIsRealtimeConnected(realtimeStudentService.isRealtimeConnected());
+  };
+
+  const handleJobViewed = (data: any) => {
+    console.log('👁️ [StudentDashboard] Job viewed:', data);
+    // This will be handled by handleDataUpdate, but we can add specific logic here
+    toast.info(`👁️ Đã xem: ${data.jobTitle}`, {
+      position: "bottom-right",
+      autoClose: 2000,
+      hideProgressBar: true,
+      style: {
+        background: theme.palette.info.main,
+        color: 'white',
+        borderRadius: '12px',
+        fontSize: '12px'
+      }
+    });
+  };
+
+  const handleJobSaved = (data: any) => {
+    console.log('💾 [StudentDashboard] Job saved:', data);
+    toast.success(`💾 Đã lưu: ${data.jobTitle}`, {
+      position: "bottom-right",
+      autoClose: 2000,
+      hideProgressBar: true,
+      style: {
+        background: theme.palette.success.main,
+        color: 'white',
+        borderRadius: '12px',
+        fontSize: '12px'
+      }
+    });
+  };
+
+  const handleJobUnsaved = (data: any) => {
+    console.log('🗑️ [StudentDashboard] Job unsaved:', data);
+    toast.info(`🗑️ Đã bỏ lưu: ${data.jobTitle}`, {
+      position: "bottom-right",
+      autoClose: 2000,
+      hideProgressBar: true,
+      style: {
+        background: theme.palette.warning.main,
+        color: 'white',
+        borderRadius: '12px',
+        fontSize: '12px'
+      }
+    });
+  };
+
+  const handleApplicationCreated = (data: any) => {
+    console.log('📝 [StudentDashboard] Application created:', data);
+    toast.success(`🎯 Ứng tuyển thành công: ${data.jobTitle}`, {
+      position: "bottom-right",
+      autoClose: 4000,
+      hideProgressBar: false,
+      style: {
+        background: theme.palette.success.main,
+        color: 'white',
+        borderRadius: '12px',
+        fontSize: '14px'
+      }
+    });
+  };
+
+  const handleApplicationUpdated = (data: any) => {
+    console.log('📋 [StudentDashboard] Application updated:', data);
+    const statusMessages = {
+      'PENDING': '⏳ Đơn ứng tuyển đang chờ xử lý',
+      'REVIEWING': '👀 Đơn ứng tuyển đang được xem xét',
+      'INTERVIEWED': '🎤 Đã phỏng vấn',
+      'ACCEPTED': '🎉 Chúc mừng! Bạn đã được chấp nhận',
+      'REJECTED': '😔 Đơn ứng tuyển bị từ chối'
+    };
+    
+    const message = statusMessages[data.status as keyof typeof statusMessages] || 'Cập nhật trạng thái ứng tuyển';
+    const isPositive = ['ACCEPTED', 'INTERVIEWED'].includes(data.status);
+    
+    toast[isPositive ? 'success' : 'info'](message, {
+      position: "bottom-right",
+      autoClose: 5000,
+      hideProgressBar: false,
+      style: {
+        background: isPositive ? theme.palette.success.main : theme.palette.info.main,
+        color: 'white',
+        borderRadius: '12px',
+        fontSize: '14px'
+      }
+    });
+  };
+
+  const handleProfileUpdated = (data: any) => {
+    console.log('👤 [StudentDashboard] Profile updated:', data);
+    toast.success('✅ Hồ sơ đã được cập nhật!', {
+      position: "bottom-right",
+      autoClose: 3000,
+      hideProgressBar: true,
+      style: {
+        background: theme.palette.success.main,
+        color: 'white',
+        borderRadius: '12px',
+        fontSize: '14px'
+      }
+    });
+  };
+
+  const handleInterviewScheduled = (data: any) => {
+    console.log('📅 [StudentDashboard] Interview scheduled:', data);
+    toast.success(`📅 Lịch phỏng vấn mới: ${data.jobTitle}`, {
+      position: "bottom-right",
+      autoClose: 5000,
+      hideProgressBar: false,
+      style: {
+        background: theme.palette.success.main,
+        color: 'white',
+        borderRadius: '12px',
+        fontSize: '14px'
+      }
+    });
+  };
+
+  const handleStatsUpdated = (stats: any) => {
+    console.log('📊 [StudentDashboard] Stats updated:', stats);
+    
+    // Update progress data state
+    if (stats) {
+      if (stats.profileCompletion !== undefined) {
+        setProfileCompletion(stats.profileCompletion);
+      }
+      if (stats.totalSkills !== undefined) {
+        setTotalSkills(stats.totalSkills);  
+      }
+      if (stats.totalProjects !== undefined) {
+        setTotalProjects(stats.totalProjects);
+      }
+      if (stats.totalCertifications !== undefined) {
+        setTotalCertifications(stats.totalCertifications);
+      }
+      
+      console.log('✅ [StudentDashboard] Progress stats updated in real-time');
+    }
+  };
+
+  // Manual refresh function
+  const handleRefresh = async () => {
+    try {
+      setLoading(true);
+      await realtimeStudentService.refresh();
+      toast.success('🔄 Dữ liệu đã được làm mới!', {
+        position: "bottom-right",
+        autoClose: 2000,
+        hideProgressBar: true,
+        style: {
+          background: theme.palette.primary.main,
+          color: 'white',
+          borderRadius: '12px'
+        }
+      });
+    } catch (error) {
+      toast.error('❌ Không thể làm mới dữ liệu');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadDashboardData = async () => {
+    try {
+      setLoading(true);
+      // This function is now handled by realtime service
+      // Keep for backwards compatibility
+      console.log('📊 [StudentDashboard] Using realtime service instead of manual load');
+      
+      if (user?.id) {
+        const response = await dashboardAPI.getStudentDashboard(user.id);
         
-        // Fallback cho các dữ liệu khác
+        if (response.data?.success && response.data?.data) {
+          const data = response.data.data;
+          // Dữ liệu đã được định dạng từ backend
+          setViewedJobs(data.viewedJobs || []);
+          setSavedJobs(data.savedJobs || []);
+          setApplications(data.applications || []);
+          setInterviews(data.interviews || []);
+          
+          // Lấy dữ liệu profile từ API hoặc từ user context
+          const profileFromAPI = data.profile || {};
+          const profileFromUser = user?.studentProfile || {};
+          
+          // Kết hợp dữ liệu từ API và từ user context
+          const combinedProfile = {
+            ...profileFromUser,
+            ...profileFromAPI,
+            // Đảm bảo các trường quan trọng luôn có giá trị
+            profile_completion: profileFromAPI.profile_completion || profileFromUser.profile_completion || 0,
+            skills: profileFromAPI.skills || profileFromUser.skills || [],
+            projects: profileFromAPI.projects || profileFromUser.projects || [],
+            github: profileFromAPI.github || profileFromUser.github || '',
+            linkedin: profileFromAPI.linkedin || profileFromUser.linkedin || '',
+            portfolio: profileFromAPI.portfolio || profileFromUser.portfolio || ''
+          };
+          
+          // Log dữ liệu kết hợp
+          console.log('Combined profile data:', combinedProfile);
+          
+          // Lưu dữ liệu profile
+          setProfileData(combinedProfile);
+          
+          // Set progress data từ stats
+          if (data.stats) {
+            setProfileCompletion(data.stats.profileCompletion || 0);
+            setTotalSkills(data.stats.totalSkills || 0);
+            setTotalProjects(data.stats.totalProjects || 0);
+            setTotalCertifications(data.stats.totalCertifications || 0);
+          }
+        } else {
+          // Fallback nếu không có dữ liệu từ API, sử dụng dữ liệu từ user context
+          if (user?.studentProfile) {
+            setProfileData(user.studentProfile);
+            console.log('Using profile data from user context:', user.studentProfile);
+          }
+          
+          // Fallback cho các dữ liệu khác
+          setViewedJobs([]);
+          setSavedJobs([]);
+          setApplications([]);
+          setInterviews([]);
+        }
+      } else {
+        console.log('No user ID available for loading dashboard data');
         setViewedJobs([]);
         setSavedJobs([]);
         setApplications([]);
@@ -792,7 +1061,7 @@ const StudentDashboard: React.FC = () => {
       console.error('Error loading dashboard data:', error);
       
       // Fallback nếu có lỗi, sử dụng dữ liệu từ user context
-      if (user.studentProfile) {
+      if (user?.studentProfile) {
         setProfileData(user.studentProfile);
         console.log('Using profile data from user context due to error:', user.studentProfile);
       }
@@ -1073,13 +1342,10 @@ const StudentDashboard: React.FC = () => {
 
         {/* Dashboard Content */}
         <Grid container spacing={3} sx={{ mb: 4 }}>
-          <Grid item xs={12} md={4}>
+          <Grid item xs={12} md={6}>
             <StudentQuickActions />
           </Grid>
-          <Grid item xs={12} md={4}>
-            <RecentActivity viewedJobs={viewedJobs} savedJobs={savedJobs} applications={applications} interviews={interviews} />
-          </Grid>
-          <Grid item xs={12} md={4}>
+          <Grid item xs={12} md={6}>
             <ProgressTracker profile={profileData || user?.studentProfile} />
           </Grid>
         </Grid>
